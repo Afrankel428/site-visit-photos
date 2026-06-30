@@ -9,7 +9,7 @@ export default function Camera() {
   const { state } = useLocation()
   const fileInputRef = useRef(null)
 
-  // The list of room prompts depends on 2BR vs 3BR.
+  // The list of prompts depends on 2BR vs 3BR.
   const checklist = buildChecklist(state?.bedrooms)
   const [stepIndex, setStepIndex] = useState(0)
   // photos: { id, url, file, room, damage: { flagged, note } }
@@ -112,9 +112,11 @@ export default function Camera() {
         <p className="context-line">{state?.property} — Unit {state?.unit} — {state?.visitType}</p>
 
         <div className="step-banner">
-          <span className="step-count">Room {stepIndex + 1} of {checklist.length}</span>
+          <span className="step-count">Step {stepIndex + 1} of {checklist.length}</span>
           <span className="step-room">{currentRoom.label}</span>
         </div>
+
+        {currentRoom.reminder && <div className="reminder">💡 {currentRoom.reminder}</div>}
 
         <input
           ref={fileInputRef}
@@ -127,7 +129,7 @@ export default function Camera() {
         />
 
         <button className="btn btn-primary" onClick={() => openCamera(false)}>
-          📷 {roomPhotos.length === 0 ? `Take ${currentRoom.label} photo` : 'Add another photo'}
+          📷 {roomPhotos.length === 0 ? 'Take photo' : 'Add another photo'}
         </button>
 
         {roomPhotos.length > 0 && <div className="photo-grid">{roomPhotos.map(renderThumb)}</div>}
@@ -138,7 +140,7 @@ export default function Camera() {
             disabled={stepIndex === 0}
             onClick={() => setStepIndex(i => i - 1)}
           >
-            ← Previous room
+            ← Previous
           </button>
           {isLastStep ? (
             <button className="btn btn-primary" onClick={finish}>
@@ -146,7 +148,7 @@ export default function Camera() {
             </button>
           ) : (
             <button className="btn btn-primary" onClick={() => setStepIndex(i => i + 1)}>
-              Next room →
+              Next →
             </button>
           )}
         </div>
