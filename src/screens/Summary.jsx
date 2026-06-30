@@ -17,7 +17,7 @@ export default function Summary() {
           <div className="summary-row"><span>Unit</span><strong>{state?.unit}</strong></div>
           <div className="summary-row"><span>Visit Type</span><strong>{state?.visitType}</strong></div>
           <div className="summary-row"><span>Date</span><strong>{today}</strong></div>
-          <div className="summary-row"><span>Photos</span><strong>0 (camera in Phase 2)</strong></div>
+          <div className="summary-row"><span>Photos</span><strong>{state?.photoCount ?? 0}</strong></div>
         </div>
         <div className="placeholder-box">
           <div className="placeholder-icon">☁️</div>
