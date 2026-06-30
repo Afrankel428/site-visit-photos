@@ -1,30 +1,54 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getProperties, addProperty } from '../storage'
+import { PROPERTIES, getProperty } from '../properties'
 
 export default function PropertyUnit() {
   const navigate = useNavigate()
-  const [properties, setProperties] = useState(getProperties)
+  const [customProps, setCustomProps] = useState(getProperties)
   const [selected, setSelected] = useState('')
   const [newProperty, setNewProperty] = useState('')
-  const [unit, setUnit] = useState('')
-  const [bedrooms, setBedrooms] = useState(null)
+  const [unit, setUnit] = useState('')        // typed unit (fallback properties)
+  const [unitSelect, setUnitSelect] = useState('') // chosen unit (onboarded properties)
+  const [bedrooms, setBedrooms] = useState(null)   // 2BR/3BR answer (fallback only)
 
   // The active property is either the tapped chip or the freshly typed name.
   const property = newProperty.trim() || selected
-  const canContinue = property && unit.trim() && bedrooms
+  const onboarded = getProperty(property)
+
+  // Chips: onboarded properties first, then any custom ones the user typed
+  // before (skipping names already covered by onboarded data).
+  const onboardedNames = PROPERTIES.map(p => p.name)
+  const chipNames = [
+    ...onboardedNames,
+    ...customProps.filter(n => !onboardedNames.some(o => o.toLowerCase() === n.toLowerCase())),
+  ]
+
+  const canContinue = onboarded
+    ? !!unitSelect
+    : property && unit.trim() && bedrooms
 
   function selectChip(name) {
     setSelected(name)
     setNewProperty('')
+    setUnit('')
+    setUnitSelect('')
+    setBedrooms(null)
   }
 
   function next() {
-    // Remember a newly typed property for next time.
-    if (newProperty.trim()) {
-      setProperties(addProperty(newProperty))
+    // Remember a newly typed (non-onboarded) property for next time.
+    if (newProperty.trim() && !getProperty(newProperty)) {
+      setCustomProps(addProperty(newProperty))
     }
-    navigate('/visit-type', { state: { property, unit: unit.trim(), bedrooms } })
+    if (onboarded) {
+      const u = onboarded.units.find(x => x.number === unitSelect)
+      navigate('/visit-type', {
+        state: { property, unit: u.number, bedrooms: u.bedrooms, bathrooms: u.bathrooms },
+      })
+    } else {
+      navigate('/visit-type', { state: { property, unit: unit.trim(), bedrooms } })
+    }
   }
 
   return (
@@ -33,11 +57,11 @@ export default function PropertyUnit() {
         <h2>Property &amp; Unit</h2>
       </header>
       <div className="screen-content">
-        {properties.length > 0 && (
+        {chipNames.length > 0 && (
           <div className="field-group">
             <label>Pick a property</label>
             <div className="chip-list">
-              {properties.map(p => (
+              {chipNames.map(p => (
                 <button
                   key={p}
                   className={`chip ${selected === p && !newProperty ? 'chip-active' : ''}`}
@@ -52,7 +76,7 @@ export default function PropertyUnit() {
 
         <div className="field-group">
           <label htmlFor="new-property">
-            {properties.length > 0 ? 'Or add a new property' : 'Property name'}
+            {chipNames.length > 0 ? 'Or add a new property' : 'Property name'}
           </label>
           <input
             id="new-property"
@@ -61,40 +85,67 @@ export default function PropertyUnit() {
             value={newProperty}
             onChange={e => {
               setNewProperty(e.target.value)
-              if (e.target.value) setSelected('')
+              if (e.target.value) {
+                setSelected('')
+                setUnitSelect('')
+              }
             }}
           />
         </div>
 
-        <div className="field-group">
-          <label htmlFor="unit">Unit Number</label>
-          <input
-            id="unit"
-            type="text"
-            inputMode="numeric"
-            placeholder="e.g. 101"
-            value={unit}
-            onChange={e => setUnit(e.target.value)}
-          />
-        </div>
-
-        <div className="field-group">
-          <label>Unit size</label>
-          <div className="chip-list">
-            <button
-              className={`chip ${bedrooms === 2 ? 'chip-active' : ''}`}
-              onClick={() => setBedrooms(2)}
+        {onboarded ? (
+          // Onboarded property: choose from its known units.
+          <div className="field-group">
+            <label htmlFor="unit-select">Unit</label>
+            <select
+              id="unit-select"
+              className="unit-select"
+              value={unitSelect}
+              onChange={e => setUnitSelect(e.target.value)}
             >
-              2-bedroom
-            </button>
-            <button
-              className={`chip ${bedrooms === 3 ? 'chip-active' : ''}`}
-              onClick={() => setBedrooms(3)}
-            >
-              3-bedroom
-            </button>
+              <option value="" disabled>Select a unit…</option>
+              {onboarded.units.map(u => (
+                <option key={u.number} value={u.number}>
+                  {u.number} ({u.bedrooms} bed / {u.bathrooms} bath)
+                </option>
+              ))}
+            </select>
+            <p className="note">{onboarded.units.length} units · {onboarded.address}</p>
           </div>
-        </div>
+        ) : (
+          // Fallback property: type the unit and answer the 2BR/3BR question.
+          <>
+            <div className="field-group">
+              <label htmlFor="unit">Unit Number</label>
+              <input
+                id="unit"
+                type="text"
+                inputMode="numeric"
+                placeholder="e.g. 101"
+                value={unit}
+                onChange={e => setUnit(e.target.value)}
+              />
+            </div>
+
+            <div className="field-group">
+              <label>Unit size</label>
+              <div className="chip-list">
+                <button
+                  className={`chip ${bedrooms === 2 ? 'chip-active' : ''}`}
+                  onClick={() => setBedrooms(2)}
+                >
+                  2-bedroom
+                </button>
+                <button
+                  className={`chip ${bedrooms === 3 ? 'chip-active' : ''}`}
+                  onClick={() => setBedrooms(3)}
+                >
+                  3-bedroom
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         <button className="btn btn-primary" disabled={!canContinue} onClick={next}>
           Next
