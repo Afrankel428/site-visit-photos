@@ -111,6 +111,25 @@ h1 { font-size: 26px; font-weight: 700; }
 
 .context-line { font-size: 14px; color: var(--muted); font-weight: 500; }
 
+.chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.chip {
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  font-size: 15px;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.chip-active {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+
 .visit-type-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
 
 .visit-type-btn {
