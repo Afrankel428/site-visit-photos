@@ -227,6 +227,64 @@ h1 { font-size: 26px; font-weight: 700; }
   justify-content: center;
 }
 
+.photo-flag {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+}
+.photo-flag-on { background: #f5a623; opacity: 1; }
+.photo-flagged { outline: 3px solid #f5a623; outline-offset: -3px; }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 20px;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal h3 { font-size: 18px; font-weight: 700; }
+
+.note-input {
+  width: 100%;
+  padding: 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 16px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+.note-input:focus { border-color: var(--blue); }
+
+.modal-actions { display: flex; gap: 10px; }
+.modal-actions .btn { flex: 1; }
+
 .placeholder-icon { font-size: 40px; }
 .placeholder-box p { font-size: 14px; line-height: 1.5; }
 
