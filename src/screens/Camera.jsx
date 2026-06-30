@@ -2,6 +2,8 @@ import { useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { buildChecklist } from '../checklist'
 
+const MIN_NOTE_LENGTH = 3
+
 export default function Camera() {
   const navigate = useNavigate()
   const { state } = useLocation()
@@ -10,15 +12,18 @@ export default function Camera() {
   // The list of room prompts depends on 2BR vs 3BR.
   const checklist = buildChecklist(state?.bedrooms)
   const [stepIndex, setStepIndex] = useState(0)
-  // photos: { id, url, file, room } — room is the checklist label or "Extra".
+  // photos: { id, url, file, room, damage: { flagged, note } }
   const [photos, setPhotos] = useState([])
-  // When true, the next captured photos are off-checklist "Extra" shots.
   const [extraMode, setExtraMode] = useState(false)
+  // The photo whose damage note is currently being edited, plus the draft text.
+  const [editingId, setEditingId] = useState(null)
+  const [noteDraft, setNoteDraft] = useState('')
 
   const currentRoom = checklist[stepIndex]
   const isLastStep = stepIndex === checklist.length - 1
   const roomPhotos = photos.filter(p => p.room === currentRoom.label)
   const extraPhotos = photos.filter(p => p.room === 'Extra')
+  const flaggedCount = photos.filter(p => p.damage?.flagged).length
 
   function openCamera(asExtra) {
     setExtraMode(asExtra)
@@ -33,6 +38,7 @@ export default function Camera() {
       url: URL.createObjectURL(file),
       file,
       room,
+      damage: { flagged: false, note: '' },
     }))
     setPhotos(prev => [...prev, ...newPhotos])
     e.target.value = ''
@@ -44,10 +50,56 @@ export default function Camera() {
       if (target) URL.revokeObjectURL(target.url)
       return prev.filter(p => p.id !== id)
     })
+    if (editingId === id) setEditingId(null)
+  }
+
+  function startFlag(photo) {
+    setEditingId(photo.id)
+    setNoteDraft(photo.damage?.note || '')
+  }
+
+  function saveNote() {
+    setPhotos(prev =>
+      prev.map(p =>
+        p.id === editingId
+          ? { ...p, damage: { flagged: true, note: noteDraft.trim() } }
+          : p
+      )
+    )
+    setEditingId(null)
+    setNoteDraft('')
+  }
+
+  function clearFlag() {
+    setPhotos(prev =>
+      prev.map(p =>
+        p.id === editingId ? { ...p, damage: { flagged: false, note: '' } } : p
+      )
+    )
+    setEditingId(null)
+    setNoteDraft('')
   }
 
   function finish() {
-    navigate('/summary', { state: { ...state, photoCount: photos.length } })
+    navigate('/summary', {
+      state: { ...state, photoCount: photos.length, flaggedCount },
+    })
+  }
+
+  function renderThumb(p) {
+    return (
+      <div key={p.id} className={`photo-thumb ${p.damage?.flagged ? 'photo-flagged' : ''}`}>
+        <img src={p.url} alt="" />
+        <button className="photo-remove" onClick={() => removePhoto(p.id)} aria-label="Remove photo">×</button>
+        <button
+          className={`photo-flag ${p.damage?.flagged ? 'photo-flag-on' : ''}`}
+          onClick={() => startFlag(p)}
+          aria-label={p.damage?.flagged ? 'Edit damage note' : 'Flag damage'}
+        >
+          ⚠️
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -78,16 +130,7 @@ export default function Camera() {
           📷 {roomPhotos.length === 0 ? `Take ${currentRoom.label} photo` : 'Add another photo'}
         </button>
 
-        {roomPhotos.length > 0 && (
-          <div className="photo-grid">
-            {roomPhotos.map(p => (
-              <div key={p.id} className="photo-thumb">
-                <img src={p.url} alt="" />
-                <button className="photo-remove" onClick={() => removePhoto(p.id)} aria-label="Remove photo">×</button>
-              </div>
-            ))}
-          </div>
-        )}
+        {roomPhotos.length > 0 && <div className="photo-grid">{roomPhotos.map(renderThumb)}</div>}
 
         <div className="step-nav">
           <button
@@ -116,19 +159,44 @@ export default function Camera() {
         {extraPhotos.length > 0 && (
           <>
             <p className="context-line">{extraPhotos.length} extra photo{extraPhotos.length === 1 ? '' : 's'}</p>
-            <div className="photo-grid">
-              {extraPhotos.map(p => (
-                <div key={p.id} className="photo-thumb">
-                  <img src={p.url} alt="" />
-                  <button className="photo-remove" onClick={() => removePhoto(p.id)} aria-label="Remove photo">×</button>
-                </div>
-              ))}
-            </div>
+            <div className="photo-grid">{extraPhotos.map(renderThumb)}</div>
           </>
         )}
 
-        <p className="context-line">{photos.length} photo{photos.length === 1 ? '' : 's'} total</p>
+        <p className="context-line">
+          {photos.length} photo{photos.length === 1 ? '' : 's'} total
+          {flaggedCount > 0 && ` · ⚠️ ${flaggedCount} flagged`}
+        </p>
       </div>
+
+      {editingId && (
+        <div className="modal-backdrop" onClick={() => setEditingId(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>⚠️ Describe the damage</h3>
+            <p className="note">A short note is required to flag this photo.</p>
+            <textarea
+              className="note-input"
+              rows={3}
+              placeholder="e.g. Cracked tile under sink, water stain on ceiling"
+              value={noteDraft}
+              autoFocus
+              onChange={e => setNoteDraft(e.target.value)}
+            />
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={clearFlag}>
+                Remove flag
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={noteDraft.trim().length < MIN_NOTE_LENGTH}
+                onClick={saveNote}
+              >
+                Save note
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
