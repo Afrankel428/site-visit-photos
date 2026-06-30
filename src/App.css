@@ -76,6 +76,14 @@ h1 { font-size: 26px; font-weight: 700; }
 .btn-primary:hover { background: var(--blue-dark); }
 .btn-primary:disabled { background: #93b8e0; cursor: default; }
 
+.btn-secondary {
+  background: var(--card);
+  color: var(--blue);
+  border: 1.5px solid var(--border);
+}
+.btn-secondary:hover { border-color: var(--blue); }
+.btn-secondary:disabled { color: var(--muted); cursor: default; }
+
 .btn-back {
   background: none;
   border: none;
@@ -162,6 +170,23 @@ h1 { font-size: 26px; font-weight: 700; }
   gap: 8px;
   color: var(--muted);
 }
+
+.step-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  background: #f0f6ff;
+  border: 1.5px solid var(--blue);
+  border-radius: var(--radius);
+}
+.step-count { font-size: 13px; color: var(--blue); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.step-room { font-size: 20px; font-weight: 700; color: var(--text); }
+
+.step-nav { display: flex; gap: 10px; }
+.step-nav .btn { flex: 1; }
+
+.divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 
 .photo-grid {
   display: grid;
