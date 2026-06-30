@@ -8,10 +8,11 @@ export default function PropertyUnit() {
   const [selected, setSelected] = useState('')
   const [newProperty, setNewProperty] = useState('')
   const [unit, setUnit] = useState('')
+  const [bedrooms, setBedrooms] = useState(null)
 
   // The active property is either the tapped chip or the freshly typed name.
   const property = newProperty.trim() || selected
-  const canContinue = property && unit.trim()
+  const canContinue = property && unit.trim() && bedrooms
 
   function selectChip(name) {
     setSelected(name)
@@ -23,7 +24,7 @@ export default function PropertyUnit() {
     if (newProperty.trim()) {
       setProperties(addProperty(newProperty))
     }
-    navigate('/visit-type', { state: { property, unit: unit.trim() } })
+    navigate('/visit-type', { state: { property, unit: unit.trim(), bedrooms } })
   }
 
   return (
@@ -75,6 +76,24 @@ export default function PropertyUnit() {
             value={unit}
             onChange={e => setUnit(e.target.value)}
           />
+        </div>
+
+        <div className="field-group">
+          <label>Unit size</label>
+          <div className="chip-list">
+            <button
+              className={`chip ${bedrooms === 2 ? 'chip-active' : ''}`}
+              onClick={() => setBedrooms(2)}
+            >
+              2-bedroom
+            </button>
+            <button
+              className={`chip ${bedrooms === 3 ? 'chip-active' : ''}`}
+              onClick={() => setBedrooms(3)}
+            >
+              3-bedroom
+            </button>
+          </div>
         </div>
 
         <button className="btn btn-primary" disabled={!canContinue} onClick={next}>
