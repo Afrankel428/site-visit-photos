@@ -1,32 +1,85 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { buildChecklist } from '../checklist'
+import { saveVisit, clearVisit, loadVisit } from '../visitStore'
 
 const MIN_NOTE_LENGTH = 3
 
 export default function Camera() {
   const navigate = useNavigate()
   const { state } = useLocation()
+  const resuming = !!state?.resume
   const videoRef = useRef(null)
   const streamRef = useRef(null)
 
-  // The list of prompts depends on 2BR vs 3BR.
-  const checklist = buildChecklist(state?.bedrooms)
+  // Visit details: from the flow for a new visit, or loaded from storage on resume.
+  const [meta, setMeta] = useState(
+    resuming
+      ? null
+      : {
+          property: state?.property,
+          unit: state?.unit,
+          visitType: state?.visitType,
+          bedrooms: state?.bedrooms,
+          bathrooms: state?.bathrooms,
+        }
+  )
+  const [loaded, setLoaded] = useState(!resuming)
   const [stepIndex, setStepIndex] = useState(0)
   // photos: { id, url, file, room, subject, damage: { flagged, note }, mold: { flagged } }
   const [photos, setPhotos] = useState([])
   const [editingId, setEditingId] = useState(null)
   const [noteDraft, setNoteDraft] = useState('')
-  // Live-camera status: 'starting' | 'ready' | 'error'. There is NO native
-  // camera fallback on purpose — Apple's "Use Photo / Retake" must never appear.
   const [camStatus, setCamStatus] = useState('starting')
   const [camError, setCamError] = useState('')
 
+  const checklist = meta ? buildChecklist(meta.bedrooms) : []
   const currentRoom = checklist[stepIndex]
   const isLastStep = stepIndex === checklist.length - 1
-  const roomPhotos = photos.filter(p => p.room === currentRoom.label)
+  const roomPhotos = currentRoom ? photos.filter(p => p.room === currentRoom.label) : []
   const flaggedCount = photos.filter(p => p.damage?.flagged).length
   const moldCount = photos.filter(p => p.mold?.flagged).length
+
+  // On resume, load the saved visit and rebuild photo previews from stored blobs.
+  useEffect(() => {
+    if (!resuming) return
+    let cancelled = false
+    loadVisit().then(v => {
+      if (cancelled) return
+      if (!v) { setLoaded(true); return }
+      setMeta({
+        property: v.property,
+        unit: v.unit,
+        visitType: v.visitType,
+        bedrooms: v.bedrooms,
+        bathrooms: v.bathrooms,
+      })
+      setPhotos(
+        (v.photos || []).map(p => ({ ...p, file: p.blob, url: URL.createObjectURL(p.blob) }))
+      )
+      setStepIndex(v.stepIndex || 0)
+      setLoaded(true)
+    })
+    return () => { cancelled = true }
+  }, [resuming])
+
+  // Auto-save the in-progress visit whenever photos or the step change.
+  useEffect(() => {
+    if (!loaded || !meta) return
+    saveVisit({
+      ...meta,
+      stepIndex,
+      photos: photos.map(p => ({
+        id: p.id,
+        room: p.room,
+        subject: p.subject,
+        damage: p.damage,
+        mold: p.mold,
+        blob: p.file,
+      })),
+      updatedAt: Date.now(),
+    })
+  }, [photos, stepIndex, loaded, meta])
 
   async function startCamera() {
     setCamStatus('starting')
@@ -56,7 +109,6 @@ export default function Camera() {
     }
   }
 
-  // Try to start on open; stop the camera when leaving the screen.
   useEffect(() => {
     startCamera()
     return () => {
@@ -81,11 +133,9 @@ export default function Camera() {
       mold: { flagged: false },
     }
     setPhotos(prev => [...prev, photo])
-    // Zero-friction: a checklist shot auto-advances. Extra shots do not.
     if (!asExtra) goNext()
   }
 
-  // Capture the current live frame — no native "Use Photo / Retake" step.
   function shoot(asExtra) {
     const video = videoRef.current
     if (!video || !video.videoWidth) return
@@ -142,9 +192,15 @@ export default function Camera() {
     )
   }
 
-  function finish() {
+  // Tap the top-left Back: the visit is already auto-saved, so just go home.
+  function leaveToHome() {
+    navigate('/')
+  }
+
+  async function finish() {
+    await clearVisit() // visit completed — no longer "in progress"
     navigate('/summary', {
-      state: { ...state, photoCount: photos.length, flaggedCount, moldCount },
+      state: { ...meta, photoCount: photos.length, flaggedCount, moldCount },
     })
   }
 
@@ -176,14 +232,25 @@ export default function Camera() {
     )
   }
 
+  // Resuming but there was nothing saved — send them home.
+  if (loaded && !meta) return <Navigate to="/" replace />
+  // Still loading the saved visit.
+  if (!loaded || !currentRoom) {
+    return (
+      <div className="screen">
+        <div className="screen-content centered"><p>Loading visit…</p></div>
+      </div>
+    )
+  }
+
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={() => navigate(-1)}>← Back</button>
+        <button className="btn-back" onClick={leaveToHome}>← Back</button>
         <h2>Take Photos</h2>
       </header>
       <div className="screen-content">
-        <p className="context-line">{state?.property} — Unit {state?.unit} — {state?.visitType}</p>
+        <p className="context-line">{meta.property} — Unit {meta.unit} — {meta.visitType}</p>
 
         <div className="step-banner">
           <span className="step-count">Step {stepIndex + 1} of {checklist.length}</span>
@@ -192,8 +259,6 @@ export default function Camera() {
 
         {currentRoom.reminder && <div className="reminder">💡 {currentRoom.reminder}</div>}
 
-        {/* Live viewfinder — the shutter captures instantly, no native confirmation.
-            The <video> element is always mounted so the stream has somewhere to attach. */}
         <div className="viewfinder" style={{ display: camStatus === 'ready' ? 'block' : 'none' }}>
           <video ref={videoRef} playsInline muted autoPlay />
         </div>
@@ -211,7 +276,6 @@ export default function Camera() {
           </div>
         )}
 
-        {/* Photos already taken for this prompt (visible if you step back to it). */}
         {roomPhotos.length > 0 && <div className="photo-grid">{roomPhotos.map(renderThumb)}</div>}
 
         {/* One bottom row: step back · shutter · skip. */}
