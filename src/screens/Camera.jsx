@@ -132,8 +132,19 @@ export default function Camera() {
       damage: { flagged: false, note: '' },
       mold: { flagged: false },
     }
-    setPhotos(prev => [...prev, photo])
-    if (!asExtra) goNext()
+    if (asExtra) {
+      // Off-checklist extras are kept alongside each other.
+      setPhotos(prev => [...prev, photo])
+    } else {
+      // One photo per checklist prompt: re-shooting replaces the old one.
+      setPhotos(prev => {
+        prev
+          .filter(p => p.room === currentRoom.label)
+          .forEach(p => URL.revokeObjectURL(p.url))
+        return [...prev.filter(p => p.room !== currentRoom.label), photo]
+      })
+      goNext()
+    }
   }
 
   function shoot(asExtra) {
