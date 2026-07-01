@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getProperties, addProperty } from '../storage'
 import { PROPERTIES, getProperty } from '../properties'
+import { loadVisit, clearVisit } from '../visitStore'
 
 export default function PropertyUnit() {
   const navigate = useNavigate()
@@ -11,6 +12,16 @@ export default function PropertyUnit() {
   const [unit, setUnit] = useState('')        // typed unit (fallback properties)
   const [unitSelect, setUnitSelect] = useState('') // chosen unit (onboarded properties)
   const [bedrooms, setBedrooms] = useState(null)   // 2BR/3BR answer (fallback only)
+  const [inProgress, setInProgress] = useState(null) // a saved, unfinished visit
+
+  // Look for an in-progress visit to offer resuming.
+  useEffect(() => {
+    loadVisit().then(setInProgress)
+  }, [])
+
+  function discardInProgress() {
+    clearVisit().then(() => setInProgress(null))
+  }
 
   // The active property is either the tapped chip or the freshly typed name.
   const property = newProperty.trim() || selected
@@ -57,6 +68,29 @@ export default function PropertyUnit() {
         <h2>Property &amp; Unit</h2>
       </header>
       <div className="screen-content">
+        {inProgress && (
+          <div className="resume-banner">
+            <p className="resume-title">
+              You're in the middle of Unit {inProgress.unit}
+              {inProgress.property ? ` at ${inProgress.property}` : ''}.
+            </p>
+            <p className="resume-sub">
+              {(inProgress.photos?.length ?? 0)} photo{(inProgress.photos?.length ?? 0) === 1 ? '' : 's'} saved. Finish it?
+            </p>
+            <div className="resume-actions">
+              <button
+                className="btn btn-primary"
+                onClick={() => navigate('/camera', { state: { resume: true } })}
+              >
+                Resume Unit {inProgress.unit}
+              </button>
+              <button className="btn btn-secondary" onClick={discardInProgress}>
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
+
         {chipNames.length > 0 && (
           <div className="field-group">
             <label>Pick a property</label>
