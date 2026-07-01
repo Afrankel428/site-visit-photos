@@ -42,7 +42,8 @@ body {
 
 .screen-content {
   flex: 1;
-  padding: 24px 20px;
+  /* Extra bottom padding keeps controls clear of the iPhone home-swipe area. */
+  padding: 24px 20px calc(28px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 20px;
