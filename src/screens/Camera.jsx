@@ -22,8 +22,12 @@ export default function Camera() {
   const currentRoom = checklist[stepIndex]
   const isLastStep = stepIndex === checklist.length - 1
   const roomPhotos = photos.filter(p => p.room === currentRoom.label)
-  const extraPhotos = photos.filter(p => p.room === 'Extra')
   const flaggedCount = photos.filter(p => p.damage?.flagged).length
+
+  function goNext() {
+    if (isLastStep) finish()
+    else setStepIndex(i => i + 1)
+  }
 
   function openCamera(asExtra) {
     setExtraMode(asExtra)
@@ -32,7 +36,11 @@ export default function Camera() {
 
   function addPhotos(e) {
     const files = Array.from(e.target.files || [])
-    const room = extraMode ? 'Extra' : currentRoom.label
+    e.target.value = ''
+    if (files.length === 0) return // camera cancelled — stay on this prompt
+
+    const asExtra = extraMode
+    const room = asExtra ? 'Extra' : currentRoom.label
     const newPhotos = files.map(file => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       url: URL.createObjectURL(file),
@@ -41,7 +49,9 @@ export default function Camera() {
       damage: { flagged: false, note: '' },
     }))
     setPhotos(prev => [...prev, ...newPhotos])
-    e.target.value = ''
+    // Zero-friction: taking a checklist photo auto-advances to the next prompt.
+    // Extra (off-checklist) photos do NOT advance.
+    if (!asExtra) goNext()
   }
 
   function removePhoto(id) {
@@ -61,9 +71,7 @@ export default function Camera() {
   function saveNote() {
     setPhotos(prev =>
       prev.map(p =>
-        p.id === editingId
-          ? { ...p, damage: { flagged: true, note: noteDraft.trim() } }
-          : p
+        p.id === editingId ? { ...p, damage: { flagged: true, note: noteDraft.trim() } } : p
       )
     )
     setEditingId(null)
@@ -72,9 +80,7 @@ export default function Camera() {
 
   function clearFlag() {
     setPhotos(prev =>
-      prev.map(p =>
-        p.id === editingId ? { ...p, damage: { flagged: false, note: '' } } : p
-      )
+      prev.map(p => (p.id === editingId ? { ...p, damage: { flagged: false, note: '' } } : p))
     )
     setEditingId(null)
     setNoteDraft('')
@@ -129,9 +135,10 @@ export default function Camera() {
         />
 
         <button className="btn btn-primary" onClick={() => openCamera(false)}>
-          📷 {roomPhotos.length === 0 ? 'Take photo' : 'Add another photo'}
+          📷 Take photo
         </button>
 
+        {/* Photos already taken for this prompt (visible if you step back to it). */}
         {roomPhotos.length > 0 && <div className="photo-grid">{roomPhotos.map(renderThumb)}</div>}
 
         <div className="step-nav">
@@ -140,17 +147,11 @@ export default function Camera() {
             disabled={stepIndex === 0}
             onClick={() => setStepIndex(i => i - 1)}
           >
-            ← Previous
+            ← Back
           </button>
-          {isLastStep ? (
-            <button className="btn btn-primary" onClick={finish}>
-              Continue to Summary
-            </button>
-          ) : (
-            <button className="btn btn-primary" onClick={() => setStepIndex(i => i + 1)}>
-              Next →
-            </button>
-          )}
+          <button className="btn btn-secondary" onClick={goNext}>
+            {isLastStep ? 'Finish →' : 'Skip →'}
+          </button>
         </div>
 
         <hr className="divider" />
@@ -158,15 +159,9 @@ export default function Camera() {
         <button className="btn btn-secondary" onClick={() => openCamera(true)}>
           ➕ Add extra (off-checklist) photo
         </button>
-        {extraPhotos.length > 0 && (
-          <>
-            <p className="context-line">{extraPhotos.length} extra photo{extraPhotos.length === 1 ? '' : 's'}</p>
-            <div className="photo-grid">{extraPhotos.map(renderThumb)}</div>
-          </>
-        )}
 
         <p className="context-line">
-          {photos.length} photo{photos.length === 1 ? '' : 's'} total
+          {photos.length} photo{photos.length === 1 ? '' : 's'} so far
           {flaggedCount > 0 && ` · ⚠️ ${flaggedCount} flagged`}
         </p>
       </div>
