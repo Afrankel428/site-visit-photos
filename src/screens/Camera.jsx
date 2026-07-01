@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { buildChecklist } from '../checklist'
 import { saveVisit, clearVisit, loadVisit } from '../visitStore'
+import { visitHandoff } from '../visitHandoff'
 
 const MIN_NOTE_LENGTH = 3
 
@@ -210,9 +211,8 @@ export default function Camera() {
 
   async function finish() {
     await clearVisit() // visit completed — no longer "in progress"
-    navigate('/summary', {
-      state: { ...meta, photoCount: photos.length, flaggedCount, moldCount },
-    })
+    visitHandoff.photos = photos // hand the actual photos to the summary
+    navigate('/summary', { state: { ...meta } })
   }
 
   function renderThumb(p) {
