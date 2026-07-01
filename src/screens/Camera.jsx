@@ -9,7 +9,6 @@ export default function Camera() {
   const { state } = useLocation()
   const videoRef = useRef(null)
   const streamRef = useRef(null)
-  const fallbackInputRef = useRef(null)
 
   // The list of prompts depends on 2BR vs 3BR.
   const checklist = buildChecklist(state?.bedrooms)
@@ -18,8 +17,10 @@ export default function Camera() {
   const [photos, setPhotos] = useState([])
   const [editingId, setEditingId] = useState(null)
   const [noteDraft, setNoteDraft] = useState('')
-  // Live-camera status: 'starting' | 'ready' | 'error'
+  // Live-camera status: 'starting' | 'ready' | 'error'. There is NO native
+  // camera fallback on purpose — Apple's "Use Photo / Retake" must never appear.
   const [camStatus, setCamStatus] = useState('starting')
+  const [camError, setCamError] = useState('')
 
   const currentRoom = checklist[stepIndex]
   const isLastStep = stepIndex === checklist.length - 1
@@ -27,34 +28,41 @@ export default function Camera() {
   const flaggedCount = photos.filter(p => p.damage?.flagged).length
   const moldCount = photos.filter(p => p.mold?.flagged).length
 
-  // Start the live camera once when the screen opens; stop it on leaving.
-  useEffect(() => {
-    let cancelled = false
-    async function start() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
-          audio: false,
-        })
-        if (cancelled) {
-          stream.getTracks().forEach(t => t.stop())
-          return
-        }
-        streamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          await videoRef.current.play().catch(() => {})
-        }
-        setCamStatus('ready')
-      } catch {
-        setCamStatus('error')
+  async function startCamera() {
+    setCamStatus('starting')
+    setCamError('')
+    try {
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('This browser does not support in-app camera access.')
       }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play().catch(() => {})
+      }
+      setCamStatus('ready')
+    } catch (err) {
+      setCamStatus('error')
+      setCamError(
+        err?.name === 'NotAllowedError'
+          ? 'Camera access is blocked. In Safari, tap the “aA” in the address bar → Website Settings → Camera → Allow, then tap “Enable camera”.'
+          : 'Could not start the camera. Make sure no other app is using it, then tap “Enable camera”.'
+      )
     }
-    start()
+  }
+
+  // Try to start on open; stop the camera when leaving the screen.
+  useEffect(() => {
+    startCamera()
     return () => {
-      cancelled = true
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function goNext() {
@@ -94,13 +102,6 @@ export default function Camera() {
       'image/jpeg',
       0.9
     )
-  }
-
-  // Fallback path (older devices / camera blocked): the native file picker.
-  function onFallbackFiles(e) {
-    const files = Array.from(e.target.files || [])
-    e.target.value = ''
-    files.forEach(file => addPhoto(file, URL.createObjectURL(file), false))
   }
 
   function removePhoto(id) {
@@ -191,35 +192,29 @@ export default function Camera() {
 
         {currentRoom.reminder && <div className="reminder">💡 {currentRoom.reminder}</div>}
 
-        {/* Live viewfinder — tapping the shutter captures instantly, no confirmation. */}
-        {camStatus !== 'error' ? (
-          <div className="viewfinder">
-            <video ref={videoRef} playsInline muted autoPlay />
-            {camStatus === 'starting' && <div className="viewfinder-hint">Starting camera…</div>}
-          </div>
-        ) : (
-          <div className="placeholder-box">
-            <div className="placeholder-icon">📷</div>
-            <p><strong>Camera unavailable</strong></p>
-            <p>Allow camera access in your browser, or use the button below to take a photo.</p>
-            <input
-              ref={fallbackInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={onFallbackFiles}
-              style={{ display: 'none' }}
-            />
-            <button className="btn btn-secondary" onClick={() => fallbackInputRef.current.click()}>
-              📷 Take photo
-            </button>
-          </div>
-        )}
+        {/* Live viewfinder — the shutter captures instantly, no native confirmation.
+            The <video> element is always mounted so the stream has somewhere to attach. */}
+        <div className="viewfinder" style={{ display: camStatus === 'ready' ? 'block' : 'none' }}>
+          <video ref={videoRef} playsInline muted autoPlay />
+        </div>
 
         {camStatus === 'ready' && (
           <button className="shutter" onClick={() => shoot(false)} aria-label="Take photo">
             <span className="shutter-ring" />
           </button>
+        )}
+
+        {camStatus === 'starting' && (
+          <div className="viewfinder"><div className="viewfinder-hint">Starting camera…</div></div>
+        )}
+
+        {camStatus === 'error' && (
+          <div className="placeholder-box">
+            <div className="placeholder-icon">📷</div>
+            <p><strong>Camera not started</strong></p>
+            <p>{camError}</p>
+            <button className="btn btn-primary" onClick={startCamera}>Enable camera</button>
+          </div>
         )}
 
         {/* Photos already taken for this prompt (visible if you step back to it). */}
