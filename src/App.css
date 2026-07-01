@@ -234,8 +234,29 @@ h1 { font-size: 26px; font-weight: 700; }
   font-size: 15px;
 }
 
+.camera-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ctrl-btn {
+  flex: 1;
+  padding: 14px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--blue);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ctrl-btn:disabled { color: var(--muted); cursor: default; }
+
 .shutter {
-  align-self: center;
+  flex: 0 0 auto;
   width: 74px;
   height: 74px;
   border-radius: 50%;
@@ -248,6 +269,7 @@ h1 { font-size: 26px; font-weight: 700; }
   padding: 0;
 }
 .shutter:active { transform: scale(0.94); }
+.shutter:disabled { border-color: var(--muted); opacity: 0.5; }
 .shutter-ring {
   width: 56px;
   height: 56px;

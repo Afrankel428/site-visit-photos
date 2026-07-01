@@ -198,12 +198,6 @@ export default function Camera() {
           <video ref={videoRef} playsInline muted autoPlay />
         </div>
 
-        {camStatus === 'ready' && (
-          <button className="shutter" onClick={() => shoot(false)} aria-label="Take photo">
-            <span className="shutter-ring" />
-          </button>
-        )}
-
         {camStatus === 'starting' && (
           <div className="viewfinder"><div className="viewfinder-hint">Starting camera…</div></div>
         )}
@@ -220,15 +214,24 @@ export default function Camera() {
         {/* Photos already taken for this prompt (visible if you step back to it). */}
         {roomPhotos.length > 0 && <div className="photo-grid">{roomPhotos.map(renderThumb)}</div>}
 
-        <div className="step-nav">
+        {/* One bottom row: step back · shutter · skip. */}
+        <div className="camera-controls">
           <button
-            className="btn btn-secondary"
+            className="ctrl-btn"
             disabled={stepIndex === 0}
             onClick={() => setStepIndex(i => i - 1)}
           >
             ← Back
           </button>
-          <button className="btn btn-secondary" onClick={goNext}>
+          <button
+            className="shutter"
+            disabled={camStatus !== 'ready'}
+            onClick={() => shoot(false)}
+            aria-label="Take photo"
+          >
+            <span className="shutter-ring" />
+          </button>
+          <button className="ctrl-btn" onClick={goNext}>
             {isLastStep ? 'Finish →' : 'Skip →'}
           </button>
         </div>
