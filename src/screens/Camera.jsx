@@ -12,7 +12,7 @@ export default function Camera() {
   // The list of prompts depends on 2BR vs 3BR.
   const checklist = buildChecklist(state?.bedrooms)
   const [stepIndex, setStepIndex] = useState(0)
-  // photos: { id, url, file, room, damage: { flagged, note } }
+  // photos: { id, url, file, room, damage: { flagged, note }, mold: { flagged } }
   const [photos, setPhotos] = useState([])
   const [extraMode, setExtraMode] = useState(false)
   // The photo whose damage note is currently being edited, plus the draft text.
@@ -23,6 +23,7 @@ export default function Camera() {
   const isLastStep = stepIndex === checklist.length - 1
   const roomPhotos = photos.filter(p => p.room === currentRoom.label)
   const flaggedCount = photos.filter(p => p.damage?.flagged).length
+  const moldCount = photos.filter(p => p.mold?.flagged).length
 
   function goNext() {
     if (isLastStep) finish()
@@ -47,6 +48,7 @@ export default function Camera() {
       file,
       room,
       damage: { flagged: false, note: '' },
+      mold: { flagged: false },
     }))
     setPhotos(prev => [...prev, ...newPhotos])
     // Zero-friction: taking a checklist photo auto-advances to the next prompt.
@@ -86,15 +88,26 @@ export default function Camera() {
     setNoteDraft('')
   }
 
+  function toggleMold(id) {
+    setPhotos(prev =>
+      prev.map(p => (p.id === id ? { ...p, mold: { flagged: !p.mold?.flagged } } : p))
+    )
+  }
+
   function finish() {
     navigate('/summary', {
-      state: { ...state, photoCount: photos.length, flaggedCount },
+      state: { ...state, photoCount: photos.length, flaggedCount, moldCount },
     })
   }
 
   function renderThumb(p) {
+    const cls = [
+      'photo-thumb',
+      p.damage?.flagged ? 'photo-flagged' : '',
+      p.mold?.flagged ? 'photo-molded' : '',
+    ].join(' ').trim()
     return (
-      <div key={p.id} className={`photo-thumb ${p.damage?.flagged ? 'photo-flagged' : ''}`}>
+      <div key={p.id} className={cls}>
         <img src={p.url} alt="" />
         <button className="photo-remove" onClick={() => removePhoto(p.id)} aria-label="Remove photo">×</button>
         <button
@@ -103,6 +116,13 @@ export default function Camera() {
           aria-label={p.damage?.flagged ? 'Edit damage note' : 'Flag damage'}
         >
           ⚠️
+        </button>
+        <button
+          className={`photo-mold ${p.mold?.flagged ? 'photo-mold-on' : ''}`}
+          onClick={() => toggleMold(p.id)}
+          aria-label={p.mold?.flagged ? 'Unflag mold' : 'Flag mold'}
+        >
+          🍄
         </button>
       </div>
     )
@@ -162,7 +182,8 @@ export default function Camera() {
 
         <p className="context-line">
           {photos.length} photo{photos.length === 1 ? '' : 's'} so far
-          {flaggedCount > 0 && ` · ⚠️ ${flaggedCount} flagged`}
+          {flaggedCount > 0 && ` · ⚠️ ${flaggedCount} damage`}
+          {moldCount > 0 && ` · 🍄 ${moldCount} mold`}
         </p>
       </div>
 
