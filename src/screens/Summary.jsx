@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Thumb from '../Thumb'
-import { loadPhotos, deletePhotoRec } from '../visitStore'
+import { loadPhotos, deletePhotoRec, deleteVisit } from '../visitStore'
+import { uploadVisit, sharePointConfigured } from '../graph'
 
 export default function Summary() {
   const navigate = useNavigate()
@@ -11,6 +12,10 @@ export default function Summary() {
 
   // Photos come straight from durable storage — they survive app closes.
   const [photos, setPhotos] = useState([])
+  const [status, setStatus] = useState('idle') // idle | uploading | done | error
+  const [progress, setProgress] = useState(0)
+  const [statusText, setStatusText] = useState('')
+  const [errorText, setErrorText] = useState('')
 
   useEffect(() => {
     if (!visitId) return
@@ -23,18 +28,44 @@ export default function Summary() {
 
   const flaggedCount = photos.filter(p => p.damage?.flagged).length
   const moldCount = photos.filter(p => p.mold?.flagged).length
+  const busy = status === 'uploading'
 
   function deletePhoto(id) {
     deletePhotoRec(id)
     setPhotos(prev => prev.filter(p => p.id !== id))
   }
 
+  async function runUpload() {
+    setStatus('uploading')
+    setErrorText('')
+    setProgress(0)
+    try {
+      await uploadVisit({
+        meta: {
+          property: state.property,
+          unit: state.unit,
+          visitType: state.visitType,
+          bedrooms: state.bedrooms,
+          bathrooms: state.bathrooms,
+        },
+        photos,
+        onProgress: setProgress,
+        onStatus: setStatusText,
+      })
+      // Only now that SharePoint confirmed everything: free the local copy.
+      await deleteVisit(visitId)
+      setStatus('done')
+    } catch (err) {
+      setErrorText(err?.message || 'Upload failed. Please try again.')
+      setStatus('error')
+    }
+  }
+
   return (
     <div className="screen">
       <header className="screen-header">
-        {/* The visit is complete and saved; Back goes home so it can never
-            re-enter the camera or disturb the finished visit's photos. */}
-        <button className="btn-back" onClick={() => navigate('/')}>← Home</button>
+        {/* Back goes home so it can never disturb the finished visit's photos. */}
+        <button className="btn-back" onClick={() => navigate('/')} disabled={busy}>← Home</button>
         <h2>Summary</h2>
       </header>
       <div className="screen-content">
@@ -48,39 +79,71 @@ export default function Summary() {
           <div className="summary-row"><span>🍄 Mold flagged</span><strong>{moldCount}</strong></div>
         </div>
 
-        {photos.length > 0 && (
+        {status === 'done' ? (
+          <div className="placeholder-box">
+            <div className="placeholder-icon">✅</div>
+            <p><strong>Uploaded to SharePoint</strong></p>
+            <p>All photos and the visit details were saved to the shared library.</p>
+          </div>
+        ) : (
           <>
-            <p className="context-line">Review photos — tap × to delete any before saving.</p>
-            <div className="photo-grid">
-              {photos.map(p => {
-                const cls = [
-                  'photo-thumb',
-                  p.damage?.flagged ? 'photo-flagged' : '',
-                  p.mold?.flagged ? 'photo-molded' : '',
-                ].join(' ').trim()
-                return (
-                  <Thumb key={p.id} file={p.blob} className={cls}>
-                    <button
-                      className="photo-remove"
-                      onClick={() => deletePhoto(p.id)}
-                      aria-label="Delete photo"
-                    >
-                      ×
-                    </button>
-                  </Thumb>
-                )
-              })}
-            </div>
+            {photos.length > 0 && (
+              <>
+                <p className="context-line">Review photos — tap × to delete any before uploading.</p>
+                <div className="photo-grid">
+                  {photos.map(p => {
+                    const cls = [
+                      'photo-thumb',
+                      p.damage?.flagged ? 'photo-flagged' : '',
+                      p.mold?.flagged ? 'photo-molded' : '',
+                    ].join(' ').trim()
+                    return (
+                      <Thumb key={p.id} file={p.blob} className={cls}>
+                        {!busy && (
+                          <button
+                            className="photo-remove"
+                            onClick={() => deletePhoto(p.id)}
+                            aria-label="Delete photo"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </Thumb>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+
+            {status === 'uploading' && (
+              <div className="upload-box">
+                <div className="progress-track">
+                  <div className="progress-fill" style={{ width: `${Math.round(progress * 100)}%` }} />
+                </div>
+                <p className="upload-status">{statusText} ({Math.round(progress * 100)}%)</p>
+              </div>
+            )}
+
+            {status === 'error' && <p className="upload-err">⚠️ {errorText}</p>}
+
+            {!sharePointConfigured && (
+              <p className="upload-err">
+                SharePoint isn’t configured yet — add the site environment variables in Vercel and redeploy.
+              </p>
+            )}
+
+            <button
+              className="btn btn-primary"
+              disabled={busy || photos.length === 0 || !sharePointConfigured}
+              onClick={runUpload}
+            >
+              {status === 'error' ? '☁️ Retry upload' : '☁️ Upload to SharePoint'}
+            </button>
           </>
         )}
 
-        <div className="placeholder-box">
-          <div className="placeholder-icon">☁️</div>
-          <p><strong>Upload to SharePoint coming next</strong></p>
-          <p>This visit is saved on your phone and will stay saved until it uploads.</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => navigate('/')}>
-          Start New Visit
+        <button className="btn btn-secondary" disabled={busy} onClick={() => navigate('/')}>
+          {status === 'done' ? 'Start New Visit' : 'Done for now'}
         </button>
       </div>
     </div>
