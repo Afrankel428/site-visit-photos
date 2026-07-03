@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { buildChecklist } from '../checklist'
+import Thumb from '../Thumb'
 import {
   saveVisitMeta,
   getInProgressVisit,
@@ -36,7 +37,7 @@ export default function Camera() {
   )
   const [loaded, setLoaded] = useState(!resuming)
   const [stepIndex, setStepIndex] = useState(0)
-  // photos: { id, url, file, room, subject, damage, mold, takenAt }
+  // photos: { id, file, room, subject, damage, mold, takenAt }
   const [photos, setPhotos] = useState([])
   const [editingId, setEditingId] = useState(null)
   const [noteDraft, setNoteDraft] = useState('')
@@ -50,7 +51,7 @@ export default function Camera() {
   const flaggedCount = photos.filter(p => p.damage?.flagged).length
   const moldCount = photos.filter(p => p.mold?.flagged).length
 
-  // On resume, load the saved visit and rebuild photo previews from stored blobs.
+  // On resume, load the saved visit and its photos from durable storage.
   useEffect(() => {
     if (!resuming) return
     let cancelled = false
@@ -67,7 +68,7 @@ export default function Camera() {
       })
       const stored = await loadPhotos(v.id)
       if (cancelled) return
-      setPhotos(stored.map(p => ({ ...p, file: p.blob, url: URL.createObjectURL(p.blob) })))
+      setPhotos(stored.map(p => ({ ...p, file: p.blob })))
       setStepIndex(v.stepIndex || 0)
       setLoaded(true)
     })
@@ -128,12 +129,10 @@ export default function Camera() {
   }
 
   // Save the photo to durable storage FIRST, then update the screen/advance.
-  // If the app dies at any point after this resolves, the photo is safe.
-  async function addPhoto(file, url, asExtra) {
+  async function addPhoto(file, asExtra) {
     const photo = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       visitId: visitIdRef.current,
-      url,
       file,
       room: asExtra ? 'Extra' : currentRoom.label,
       subject: asExtra ? 'Extra' : currentRoom.id,
@@ -142,26 +141,24 @@ export default function Camera() {
       takenAt: Date.now(),
     }
 
-    let replaced = []
-    if (!asExtra) {
-      // One photo per checklist prompt: re-shooting replaces the old one.
-      replaced = photos.filter(p => p.room === currentRoom.label)
-    }
+    // One photo per checklist prompt: re-shooting replaces the old one.
+    const replaced = asExtra ? [] : photos.filter(p => p.room === currentRoom.label)
 
-    // Durable write of the new photo, then remove any replaced record.
-    await savePhoto({
-      id: photo.id,
-      visitId: photo.visitId,
-      room: photo.room,
-      subject: photo.subject,
-      damage: photo.damage,
-      mold: photo.mold,
-      blob: file,
-      takenAt: photo.takenAt,
-    })
-    for (const old of replaced) {
-      await deletePhotoRec(old.id)
-      URL.revokeObjectURL(old.url)
+    try {
+      await savePhoto({
+        id: photo.id,
+        visitId: photo.visitId,
+        room: photo.room,
+        subject: photo.subject,
+        damage: photo.damage,
+        mold: photo.mold,
+        blob: file,
+        takenAt: photo.takenAt,
+      })
+      for (const old of replaced) await deletePhotoRec(old.id)
+    } catch (err) {
+      console.error('Failed to save photo', err)
+      setCamError('Could not save that photo — please try again.')
     }
 
     const next = asExtra
@@ -182,7 +179,7 @@ export default function Camera() {
       blob => {
         if (!blob) return
         const file = new File([blob], `${currentRoom.id || 'photo'}.jpg`, { type: 'image/jpeg' })
-        addPhoto(file, URL.createObjectURL(blob), asExtra)
+        addPhoto(file, asExtra)
       },
       'image/jpeg',
       0.9
@@ -191,11 +188,7 @@ export default function Camera() {
 
   function removePhoto(id) {
     deletePhotoRec(id)
-    setPhotos(prev => {
-      const target = prev.find(p => p.id === id)
-      if (target) URL.revokeObjectURL(target.url)
-      return prev.filter(p => p.id !== id)
-    })
+    setPhotos(prev => prev.filter(p => p.id !== id))
     if (editingId === id) setEditingId(null)
   }
 
@@ -237,12 +230,9 @@ export default function Camera() {
   }
 
   // Mark the visit completed — it and its photos STAY stored until uploaded.
-  async function finish(latestPhotos) {
+  async function finish() {
     await completeVisit(visitIdRef.current)
-    navigate('/summary', {
-      state: { ...meta, visitId: visitIdRef.current },
-    })
-    void latestPhotos // counts are derived from storage on the summary
+    navigate('/summary', { state: { ...meta, visitId: visitIdRef.current } })
   }
 
   function renderThumb(p) {
@@ -252,8 +242,7 @@ export default function Camera() {
       p.mold?.flagged ? 'photo-molded' : '',
     ].join(' ').trim()
     return (
-      <div key={p.id} className={cls}>
-        <img src={p.url} alt="" />
+      <Thumb key={p.id} file={p.file} className={cls}>
         <button className="photo-remove" onClick={() => removePhoto(p.id)} aria-label="Remove photo">×</button>
         <button
           className={`photo-flag ${p.damage?.flagged ? 'photo-flag-on' : ''}`}
@@ -269,7 +258,7 @@ export default function Camera() {
         >
           🍄
         </button>
-      </div>
+      </Thumb>
     )
   }
 
@@ -311,7 +300,7 @@ export default function Camera() {
         {camStatus === 'error' && (
           <div className="placeholder-box">
             <div className="placeholder-icon">📷</div>
-            <p><strong>Camera not started</strong></p>
+            <p><strong>Camera problem</strong></p>
             <p>{camError}</p>
             <button className="btn btn-primary" onClick={startCamera}>Enable camera</button>
           </div>

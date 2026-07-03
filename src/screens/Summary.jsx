@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import Thumb from '../Thumb'
 import { loadPhotos, deletePhotoRec } from '../visitStore'
 
 export default function Summary() {
@@ -15,8 +16,7 @@ export default function Summary() {
     if (!visitId) return
     let cancelled = false
     loadPhotos(visitId).then(stored => {
-      if (cancelled) return
-      setPhotos(stored.map(p => ({ ...p, url: URL.createObjectURL(p.blob) })))
+      if (!cancelled) setPhotos(stored)
     })
     return () => { cancelled = true }
   }, [visitId])
@@ -26,11 +26,7 @@ export default function Summary() {
 
   function deletePhoto(id) {
     deletePhotoRec(id)
-    setPhotos(prev => {
-      const target = prev.find(p => p.id === id)
-      if (target?.url) URL.revokeObjectURL(target.url)
-      return prev.filter(p => p.id !== id)
-    })
+    setPhotos(prev => prev.filter(p => p.id !== id))
   }
 
   return (
@@ -61,8 +57,7 @@ export default function Summary() {
                   p.mold?.flagged ? 'photo-molded' : '',
                 ].join(' ').trim()
                 return (
-                  <div key={p.id} className={cls}>
-                    <img src={p.url} alt="" />
+                  <Thumb key={p.id} file={p.blob} className={cls}>
                     <button
                       className="photo-remove"
                       onClick={() => deletePhoto(p.id)}
@@ -70,7 +65,7 @@ export default function Summary() {
                     >
                       ×
                     </button>
-                  </div>
+                  </Thumb>
                 )
               })}
             </div>
