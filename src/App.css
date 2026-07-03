@@ -189,6 +189,27 @@ h1 { font-size: 26px; font-weight: 700; }
   color: #fff;
 }
 
+.chip-removable { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px 6px 14px; }
+.chip-text {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.chip-x {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.65;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.chip-x:hover { opacity: 1; }
+
 .visit-type-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
 
 .visit-type-btn {

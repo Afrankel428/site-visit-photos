@@ -25,3 +25,10 @@ export function addProperty(name) {
   localStorage.setItem(PROPERTIES_KEY, JSON.stringify(updated))
   return updated
 }
+
+// Remove a typed property from this device's saved list.
+export function removeProperty(name) {
+  const updated = getProperties().filter(p => p.toLowerCase() !== name.toLowerCase())
+  localStorage.setItem(PROPERTIES_KEY, JSON.stringify(updated))
+  return updated
+}
