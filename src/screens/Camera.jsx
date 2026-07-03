@@ -274,12 +274,14 @@ export default function Camera() {
   }
 
   return (
-    <div className="screen">
+    <div className="screen camera-screen">
       <header className="screen-header">
         <button className="btn-back" onClick={leaveToHome}>← Back</button>
         <h2>Take Photos</h2>
       </header>
-      <div className="screen-content">
+
+      {/* Everything above the controls scrolls; the control row below stays pinned. */}
+      <div className="camera-scroll">
         <p className="context-line">{meta.property} — Unit {meta.unit} — {meta.visitType}</p>
 
         <div className="step-banner">
@@ -289,26 +291,44 @@ export default function Camera() {
 
         {currentRoom.reminder && <div className="reminder">💡 {currentRoom.reminder}</div>}
 
-        <div className="viewfinder" style={{ display: camStatus === 'ready' ? 'block' : 'none' }}>
-          <video ref={videoRef} playsInline muted autoPlay />
+        <div className="viewfinder">
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            autoPlay
+            style={{ display: camStatus === 'ready' ? 'block' : 'none' }}
+          />
+          {camStatus === 'starting' && <div className="viewfinder-hint">Starting camera…</div>}
+          {camStatus === 'error' && (
+            <div className="viewfinder-hint viewfinder-error">
+              <div className="placeholder-icon">📷</div>
+              <p><strong>Camera problem</strong></p>
+              <p>{camError}</p>
+              <button className="btn btn-primary" onClick={startCamera}>Enable camera</button>
+            </div>
+          )}
         </div>
-
-        {camStatus === 'starting' && (
-          <div className="viewfinder"><div className="viewfinder-hint">Starting camera…</div></div>
-        )}
-
-        {camStatus === 'error' && (
-          <div className="placeholder-box">
-            <div className="placeholder-icon">📷</div>
-            <p><strong>Camera problem</strong></p>
-            <p>{camError}</p>
-            <button className="btn btn-primary" onClick={startCamera}>Enable camera</button>
-          </div>
-        )}
 
         {roomPhotos.length > 0 && <div className="photo-grid">{roomPhotos.map(renderThumb)}</div>}
 
-        {/* One bottom row: step back · shutter · skip. */}
+        <button
+          className="btn btn-secondary"
+          disabled={camStatus !== 'ready'}
+          onClick={() => shoot(true)}
+        >
+          ➕ Add extra (off-checklist) photo
+        </button>
+
+        <p className="context-line">
+          {photos.length} photo{photos.length === 1 ? '' : 's'} so far
+          {flaggedCount > 0 && ` · ⚠️ ${flaggedCount} damage`}
+          {moldCount > 0 && ` · 🍄 ${moldCount} mold`}
+        </p>
+      </div>
+
+      {/* Pinned control row: step back · shutter · skip. Never moves between steps. */}
+      <div className="camera-footer">
         <div className="camera-controls">
           <button
             className="ctrl-btn"
@@ -329,22 +349,6 @@ export default function Camera() {
             {isLastStep ? 'Finish →' : 'Skip →'}
           </button>
         </div>
-
-        <hr className="divider" />
-
-        <button
-          className="btn btn-secondary"
-          disabled={camStatus !== 'ready'}
-          onClick={() => shoot(true)}
-        >
-          ➕ Add extra (off-checklist) photo
-        </button>
-
-        <p className="context-line">
-          {photos.length} photo{photos.length === 1 ? '' : 's'} so far
-          {flaggedCount > 0 && ` · ⚠️ ${flaggedCount} damage`}
-          {moldCount > 0 && ` · 🍄 ${moldCount} mold`}
-        </p>
       </div>
 
       {editingId && (
