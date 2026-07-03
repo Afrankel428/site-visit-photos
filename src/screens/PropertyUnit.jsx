@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { getProperties, addProperty } from '../storage'
 import { PROPERTIES, getProperty } from '../properties'
 import { loadVisit, clearVisit } from '../visitStore'
+import { getActiveAccount, signOutUser } from '../auth'
 
 export default function PropertyUnit() {
   const navigate = useNavigate()
+  const account = getActiveAccount()
   const [customProps, setCustomProps] = useState(getProperties)
   const [selected, setSelected] = useState('')
   const [newProperty, setNewProperty] = useState('')
@@ -68,6 +70,13 @@ export default function PropertyUnit() {
         <h2>Property &amp; Unit</h2>
       </header>
       <div className="screen-content">
+        {account && (
+          <div className="account-bar">
+            <span>Signed in as <strong>{account.username}</strong></span>
+            <button className="btn-link" onClick={() => signOutUser()}>Sign out</button>
+          </div>
+        )}
+
         {inProgress && (
           <div className="resume-banner">
             <p className="resume-title">
