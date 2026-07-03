@@ -1,25 +1,35 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { visitHandoff } from '../visitHandoff'
+import { loadPhotos, deletePhotoRec } from '../visitStore'
 
 export default function Summary() {
   const navigate = useNavigate()
   const { state } = useLocation()
+  const visitId = state?.visitId
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
-  // Photos are handed over from the camera screen (kept in memory, not history).
-  const [photos, setPhotos] = useState(visitHandoff.photos)
+  // Photos come straight from durable storage — they survive app closes.
+  const [photos, setPhotos] = useState([])
+
+  useEffect(() => {
+    if (!visitId) return
+    let cancelled = false
+    loadPhotos(visitId).then(stored => {
+      if (cancelled) return
+      setPhotos(stored.map(p => ({ ...p, url: URL.createObjectURL(p.blob) })))
+    })
+    return () => { cancelled = true }
+  }, [visitId])
 
   const flaggedCount = photos.filter(p => p.damage?.flagged).length
   const moldCount = photos.filter(p => p.mold?.flagged).length
 
   function deletePhoto(id) {
+    deletePhotoRec(id)
     setPhotos(prev => {
       const target = prev.find(p => p.id === id)
       if (target?.url) URL.revokeObjectURL(target.url)
-      const next = prev.filter(p => p.id !== id)
-      visitHandoff.photos = next // keep the shared copy in sync
-      return next
+      return prev.filter(p => p.id !== id)
     })
   }
 
@@ -69,8 +79,8 @@ export default function Summary() {
 
         <div className="placeholder-box">
           <div className="placeholder-icon">☁️</div>
-          <p><strong>Upload to SharePoint coming in Phase 4–5</strong></p>
-          <p>Photos will upload automatically to your company's shared folder.</p>
+          <p><strong>Upload to SharePoint coming next</strong></p>
+          <p>This visit is saved on your phone and will stay saved until it uploads.</p>
         </div>
         <button className="btn btn-primary" onClick={() => navigate('/')}>
           Start New Visit
