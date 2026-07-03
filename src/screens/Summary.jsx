@@ -32,7 +32,9 @@ export default function Summary() {
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={() => navigate(-1)}>← Back</button>
+        {/* The visit is complete and saved; Back goes home so it can never
+            re-enter the camera or disturb the finished visit's photos. */}
+        <button className="btn-back" onClick={() => navigate('/')}>← Home</button>
         <h2>Summary</h2>
       </header>
       <div className="screen-content">
