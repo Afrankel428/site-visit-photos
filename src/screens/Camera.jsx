@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { buildChecklist } from '../checklist'
-import { saveVisit, clearVisit, loadVisit } from '../visitStore'
-import { visitHandoff } from '../visitHandoff'
+import {
+  saveVisitMeta,
+  getInProgressVisit,
+  completeVisit,
+  savePhoto,
+  deletePhotoRec,
+  updatePhotoRec,
+  loadPhotos,
+} from '../visitStore'
 
 const MIN_NOTE_LENGTH = 3
 
@@ -12,6 +19,8 @@ export default function Camera() {
   const resuming = !!state?.resume
   const videoRef = useRef(null)
   const streamRef = useRef(null)
+  // Stable visit id for this walkthrough (new visits get a fresh one).
+  const visitIdRef = useRef(`v-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
   // Visit details: from the flow for a new visit, or loaded from storage on resume.
   const [meta, setMeta] = useState(
@@ -27,7 +36,7 @@ export default function Camera() {
   )
   const [loaded, setLoaded] = useState(!resuming)
   const [stepIndex, setStepIndex] = useState(0)
-  // photos: { id, url, file, room, subject, damage: { flagged, note }, mold: { flagged } }
+  // photos: { id, url, file, room, subject, damage, mold, takenAt }
   const [photos, setPhotos] = useState([])
   const [editingId, setEditingId] = useState(null)
   const [noteDraft, setNoteDraft] = useState('')
@@ -45,9 +54,10 @@ export default function Camera() {
   useEffect(() => {
     if (!resuming) return
     let cancelled = false
-    loadVisit().then(v => {
+    getInProgressVisit().then(async v => {
       if (cancelled) return
       if (!v) { setLoaded(true); return }
+      visitIdRef.current = v.id
       setMeta({
         property: v.property,
         unit: v.unit,
@@ -55,32 +65,26 @@ export default function Camera() {
         bedrooms: v.bedrooms,
         bathrooms: v.bathrooms,
       })
-      setPhotos(
-        (v.photos || []).map(p => ({ ...p, file: p.blob, url: URL.createObjectURL(p.blob) }))
-      )
+      const stored = await loadPhotos(v.id)
+      if (cancelled) return
+      setPhotos(stored.map(p => ({ ...p, file: p.blob, url: URL.createObjectURL(p.blob) })))
       setStepIndex(v.stepIndex || 0)
       setLoaded(true)
     })
     return () => { cancelled = true }
   }, [resuming])
 
-  // Auto-save the in-progress visit whenever photos or the step change.
+  // Keep the (tiny) visit record up to date — never rewrites photos.
   useEffect(() => {
     if (!loaded || !meta) return
-    saveVisit({
+    saveVisitMeta({
+      id: visitIdRef.current,
       ...meta,
       stepIndex,
-      photos: photos.map(p => ({
-        id: p.id,
-        room: p.room,
-        subject: p.subject,
-        damage: p.damage,
-        mold: p.mold,
-        blob: p.file,
-      })),
+      status: 'in-progress',
       updatedAt: Date.now(),
     })
-  }, [photos, stepIndex, loaded, meta])
+  }, [stepIndex, loaded, meta])
 
   async function startCamera() {
     setCamStatus('starting')
@@ -118,34 +122,53 @@ export default function Camera() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function goNext() {
-    if (isLastStep) finish()
+  function goNext(latestPhotos) {
+    if (isLastStep) finish(latestPhotos)
     else setStepIndex(i => i + 1)
   }
 
-  function addPhoto(file, url, asExtra) {
+  // Save the photo to durable storage FIRST, then update the screen/advance.
+  // If the app dies at any point after this resolves, the photo is safe.
+  async function addPhoto(file, url, asExtra) {
     const photo = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      visitId: visitIdRef.current,
       url,
       file,
       room: asExtra ? 'Extra' : currentRoom.label,
       subject: asExtra ? 'Extra' : currentRoom.id,
       damage: { flagged: false, note: '' },
       mold: { flagged: false },
+      takenAt: Date.now(),
     }
-    if (asExtra) {
-      // Off-checklist extras are kept alongside each other.
-      setPhotos(prev => [...prev, photo])
-    } else {
+
+    let replaced = []
+    if (!asExtra) {
       // One photo per checklist prompt: re-shooting replaces the old one.
-      setPhotos(prev => {
-        prev
-          .filter(p => p.room === currentRoom.label)
-          .forEach(p => URL.revokeObjectURL(p.url))
-        return [...prev.filter(p => p.room !== currentRoom.label), photo]
-      })
-      goNext()
+      replaced = photos.filter(p => p.room === currentRoom.label)
     }
+
+    // Durable write of the new photo, then remove any replaced record.
+    await savePhoto({
+      id: photo.id,
+      visitId: photo.visitId,
+      room: photo.room,
+      subject: photo.subject,
+      damage: photo.damage,
+      mold: photo.mold,
+      blob: file,
+      takenAt: photo.takenAt,
+    })
+    for (const old of replaced) {
+      await deletePhotoRec(old.id)
+      URL.revokeObjectURL(old.url)
+    }
+
+    const next = asExtra
+      ? [...photos, photo]
+      : [...photos.filter(p => p.room !== currentRoom.label), photo]
+    setPhotos(next)
+    if (!asExtra) goNext(next)
   }
 
   function shoot(asExtra) {
@@ -167,6 +190,7 @@ export default function Camera() {
   }
 
   function removePhoto(id) {
+    deletePhotoRec(id)
     setPhotos(prev => {
       const target = prev.find(p => p.id === id)
       if (target) URL.revokeObjectURL(target.url)
@@ -181,38 +205,44 @@ export default function Camera() {
   }
 
   function saveNote() {
-    setPhotos(prev =>
-      prev.map(p =>
-        p.id === editingId ? { ...p, damage: { flagged: true, note: noteDraft.trim() } } : p
-      )
-    )
+    const damage = { flagged: true, note: noteDraft.trim() }
+    updatePhotoRec(editingId, { damage })
+    setPhotos(prev => prev.map(p => (p.id === editingId ? { ...p, damage } : p)))
     setEditingId(null)
     setNoteDraft('')
   }
 
   function clearFlag() {
-    setPhotos(prev =>
-      prev.map(p => (p.id === editingId ? { ...p, damage: { flagged: false, note: '' } } : p))
-    )
+    const damage = { flagged: false, note: '' }
+    updatePhotoRec(editingId, { damage })
+    setPhotos(prev => prev.map(p => (p.id === editingId ? { ...p, damage } : p)))
     setEditingId(null)
     setNoteDraft('')
   }
 
   function toggleMold(id) {
     setPhotos(prev =>
-      prev.map(p => (p.id === id ? { ...p, mold: { flagged: !p.mold?.flagged } } : p))
+      prev.map(p => {
+        if (p.id !== id) return p
+        const mold = { flagged: !p.mold?.flagged }
+        updatePhotoRec(id, { mold })
+        return { ...p, mold }
+      })
     )
   }
 
-  // Tap the top-left Back: the visit is already auto-saved, so just go home.
+  // Tap the top-left Back: everything is already saved, so just go home.
   function leaveToHome() {
     navigate('/')
   }
 
-  async function finish() {
-    await clearVisit() // visit completed — no longer "in progress"
-    visitHandoff.photos = photos // hand the actual photos to the summary
-    navigate('/summary', { state: { ...meta } })
+  // Mark the visit completed — it and its photos STAY stored until uploaded.
+  async function finish(latestPhotos) {
+    await completeVisit(visitIdRef.current)
+    navigate('/summary', {
+      state: { ...meta, visitId: visitIdRef.current },
+    })
+    void latestPhotos // counts are derived from storage on the summary
   }
 
   function renderThumb(p) {
@@ -306,7 +336,7 @@ export default function Camera() {
           >
             <span className="shutter-ring" />
           </button>
-          <button className="ctrl-btn" onClick={goNext}>
+          <button className="ctrl-btn" onClick={() => goNext(photos)}>
             {isLastStep ? 'Finish →' : 'Skip →'}
           </button>
         </div>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getProperties, addProperty } from '../storage'
 import { PROPERTIES, getProperty } from '../properties'
-import { loadVisit, clearVisit } from '../visitStore'
+import { getInProgressVisit, deleteVisit, loadPhotos } from '../visitStore'
 import { getActiveAccount, signOutUser } from '../auth'
 
 export default function PropertyUnit() {
@@ -15,14 +15,18 @@ export default function PropertyUnit() {
   const [unitSelect, setUnitSelect] = useState('') // chosen unit (onboarded properties)
   const [bedrooms, setBedrooms] = useState(null)   // 2BR/3BR answer (fallback only)
   const [inProgress, setInProgress] = useState(null) // a saved, unfinished visit
+  const [inProgressCount, setInProgressCount] = useState(0)
 
   // Look for an in-progress visit to offer resuming.
   useEffect(() => {
-    loadVisit().then(setInProgress)
+    getInProgressVisit().then(async v => {
+      setInProgress(v)
+      if (v) setInProgressCount((await loadPhotos(v.id)).length)
+    })
   }, [])
 
   function discardInProgress() {
-    clearVisit().then(() => setInProgress(null))
+    deleteVisit(inProgress.id).then(() => setInProgress(null))
   }
 
   // The active property is either the tapped chip or the freshly typed name.
@@ -84,7 +88,7 @@ export default function PropertyUnit() {
               {inProgress.property ? ` at ${inProgress.property}` : ''}.
             </p>
             <p className="resume-sub">
-              {(inProgress.photos?.length ?? 0)} photo{(inProgress.photos?.length ?? 0) === 1 ? '' : 's'} saved. Finish it?
+              {inProgressCount} photo{inProgressCount === 1 ? '' : 's'} saved. Finish it?
             </p>
             <div className="resume-actions">
               <button
