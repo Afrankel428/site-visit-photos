@@ -16,6 +16,7 @@ export default function PropertyUnit() {
   const [bedrooms, setBedrooms] = useState(null)   // 2BR/3BR answer (fallback only)
   const [inProgress, setInProgress] = useState(null) // a saved, unfinished visit
   const [inProgressCount, setInProgressCount] = useState(0)
+  const [confirmNew, setConfirmNew] = useState(false) // discard-unfinished prompt
 
   // Look for an in-progress visit to offer resuming.
   useEffect(() => {
@@ -53,7 +54,17 @@ export default function PropertyUnit() {
     setBedrooms(null)
   }
 
+  // Tapping Next: if there's an unfinished visit, ask before discarding it.
   function next() {
+    if (inProgress) {
+      setConfirmNew(true)
+    } else {
+      proceed()
+    }
+  }
+
+  // Actually start the new visit (after any confirmation).
+  function proceed() {
     // Remember a newly typed (non-onboarded) property for next time.
     if (newProperty.trim() && !getProperty(newProperty)) {
       setCustomProps(addProperty(newProperty))
@@ -66,6 +77,16 @@ export default function PropertyUnit() {
     } else {
       navigate('/visit-type', { state: { property, unit: unit.trim(), bedrooms } })
     }
+  }
+
+  // Confirmed "start new": discard the unfinished visit, then proceed.
+  function discardAndProceed() {
+    const id = inProgress.id
+    setConfirmNew(false)
+    deleteVisit(id).then(() => {
+      setInProgress(null)
+      proceed()
+    })
   }
 
   return (
@@ -198,6 +219,28 @@ export default function PropertyUnit() {
           Next
         </button>
       </div>
+
+      {confirmNew && inProgress && (
+        <div className="modal-backdrop" onClick={() => setConfirmNew(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Discard unfinished visit?</h3>
+            <p className="note">
+              You have an unfinished visit at Unit {inProgress.unit}
+              {inProgress.property ? ` (${inProgress.property})` : ''} with{' '}
+              {inProgressCount} photo{inProgressCount === 1 ? '' : 's'}. Starting a new one
+              will discard it. Continue?
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setConfirmNew(false)}>
+                Keep it
+              </button>
+              <button className="btn btn-primary" onClick={discardAndProceed}>
+                Discard &amp; start new
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
