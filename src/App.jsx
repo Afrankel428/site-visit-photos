@@ -1,17 +1,34 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import SignIn from './screens/SignIn'
 import PropertyUnit from './screens/PropertyUnit'
 import VisitType from './screens/VisitType'
 import Camera from './screens/Camera'
 import Summary from './screens/Summary'
+import { initAuth, signIn, authConfigured } from './auth'
 import './App.css'
 
 export default function App() {
-  const [signedIn, setSignedIn] = useState(false)
+  const [account, setAccount] = useState(null)
+  const [ready, setReady] = useState(false)
 
-  if (!signedIn) {
-    return <SignIn onSignIn={() => setSignedIn(true)} />
+  useEffect(() => {
+    initAuth()
+      .then(acc => setAccount(acc))
+      .catch(() => setAccount(null))
+      .finally(() => setReady(true))
+  }, [])
+
+  if (!ready) {
+    return (
+      <div className="screen">
+        <div className="screen-content centered"><p>Loading…</p></div>
+      </div>
+    )
+  }
+
+  if (!account) {
+    return <SignIn configured={authConfigured} onSignIn={signIn} />
   }
 
   return (
