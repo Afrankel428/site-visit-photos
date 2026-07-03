@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getProperties, addProperty } from '../storage'
+import { getProperties, addProperty, removeProperty } from '../storage'
 import { PROPERTIES, getProperty } from '../properties'
 import { getInProgressVisit, deleteVisit, loadPhotos } from '../visitStore'
 import { getActiveAccount, signOutUser } from '../auth'
@@ -52,6 +52,16 @@ export default function PropertyUnit() {
     setUnit('')
     setUnitSelect('')
     setBedrooms(null)
+  }
+
+  // Delete a typed (non-onboarded) property from this device's list.
+  function removeCustom(name) {
+    setCustomProps(removeProperty(name))
+    if (selected === name) {
+      setSelected('')
+      setUnitSelect('')
+      setBedrooms(null)
+    }
   }
 
   // Tapping Next: if there's an unfinished visit, ask before discarding it.
@@ -129,15 +139,33 @@ export default function PropertyUnit() {
           <div className="field-group">
             <label>Pick a property</label>
             <div className="chip-list">
-              {chipNames.map(p => (
-                <button
-                  key={p}
-                  className={`chip ${selected === p && !newProperty ? 'chip-active' : ''}`}
-                  onClick={() => selectChip(p)}
-                >
-                  {p}
-                </button>
-              ))}
+              {chipNames.map(p => {
+                const active = selected === p && !newProperty
+                const isCustom = !onboardedNames.some(o => o.toLowerCase() === p.toLowerCase())
+                if (!isCustom) {
+                  return (
+                    <button
+                      key={p}
+                      className={`chip ${active ? 'chip-active' : ''}`}
+                      onClick={() => selectChip(p)}
+                    >
+                      {p}
+                    </button>
+                  )
+                }
+                return (
+                  <span key={p} className={`chip chip-removable ${active ? 'chip-active' : ''}`}>
+                    <button className="chip-text" onClick={() => selectChip(p)}>{p}</button>
+                    <button
+                      className="chip-x"
+                      onClick={() => removeCustom(p)}
+                      aria-label={`Remove ${p}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                )
+              })}
             </div>
           </div>
         )}
