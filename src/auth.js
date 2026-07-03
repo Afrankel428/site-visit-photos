@@ -49,3 +49,18 @@ export function signOutUser() {
 export function getActiveAccount() {
   return msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0] || null
 }
+
+// Get a Microsoft Graph access token for the signed-in user (for uploads).
+// Tries silently; if that needs interaction, redirects to sign in again.
+export async function getGraphToken() {
+  const account = getActiveAccount()
+  if (!account) throw new Error('Please sign in again.')
+  const request = { scopes: ['Sites.ReadWrite.All', 'Files.ReadWrite.All'], account }
+  try {
+    const res = await msalInstance.acquireTokenSilent(request)
+    return res.accessToken
+  } catch {
+    await msalInstance.acquireTokenRedirect(request)
+    throw new Error('Redirecting to sign in…')
+  }
+}
