@@ -5,6 +5,7 @@ import PropertyUnit from './screens/PropertyUnit'
 import VisitType from './screens/VisitType'
 import Camera from './screens/Camera'
 import Summary from './screens/Summary'
+import UpdatePrompt from './UpdatePrompt'
 import { initAuth, signIn, authConfigured } from './auth'
 import './App.css'
 
@@ -19,27 +20,33 @@ export default function App() {
       .finally(() => setReady(true))
   }, [])
 
+  let content
   if (!ready) {
-    return (
+    content = (
       <div className="screen">
         <div className="screen-content centered"><p>Loading…</p></div>
       </div>
     )
-  }
-
-  if (!account) {
-    return <SignIn configured={authConfigured} onSignIn={signIn} />
+  } else if (!account) {
+    content = <SignIn configured={authConfigured} onSignIn={signIn} />
+  } else {
+    content = (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<PropertyUnit />} />
+          <Route path="/visit-type" element={<VisitType />} />
+          <Route path="/camera" element={<Camera />} />
+          <Route path="/summary" element={<Summary />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    )
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<PropertyUnit />} />
-        <Route path="/visit-type" element={<VisitType />} />
-        <Route path="/camera" element={<Camera />} />
-        <Route path="/summary" element={<Summary />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <>
+      <UpdatePrompt />
+      {content}
+    </>
   )
 }
