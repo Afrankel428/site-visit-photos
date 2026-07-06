@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { buildChecklist } from '../checklist'
 import { GROUNDS_CHECKLIST } from '../groundsChecklist'
+import { ISSUE_TYPES, getIssueType } from '../issueTypes'
 import Thumb from '../Thumb'
 import {
   saveVisitMeta,
@@ -14,6 +15,7 @@ import {
 } from '../visitStore'
 
 const MIN_NOTE_LENGTH = 3
+const INTRO_SEEN_KEY = 'svp.cameraIntroSeen'
 
 export default function Camera() {
   const navigate = useNavigate()
@@ -40,20 +42,29 @@ export default function Camera() {
   )
   const [loaded, setLoaded] = useState(!resuming)
   const [stepIndex, setStepIndex] = useState(0)
-  // photos: { id, file, room, subject, damage, mold, takenAt }
+  // photos: { id, file, room, subject, issue:{flagged,typeId,label,code,customType,note}, takenAt }
   const [photos, setPhotos] = useState([])
-  const [editingId, setEditingId] = useState(null)
-  const [noteDraft, setNoteDraft] = useState('')
   const [camStatus, setCamStatus] = useState('starting')
   const [camError, setCamError] = useState('')
+
+  // Issue editor (opened by the red ⚠️ shutter or a thumbnail's flag button).
+  const [editingId, setEditingId] = useState(null)
+  const [issueType, setIssueType] = useState('')   // chosen issue-type id
+  const [customType, setCustomType] = useState('') // typed type when "Other"
+  const [noteDraft, setNoteDraft] = useState('')
+  const [advanceAfter, setAdvanceAfter] = useState(false) // advance once note saved
+
+  // One-time intro overlay explaining the two shutter buttons.
+  const [showIntro, setShowIntro] = useState(() => {
+    try { return !localStorage.getItem(INTRO_SEEN_KEY) } catch { return false }
+  })
 
   const isGrounds = meta?.mode === 'grounds'
   const checklist = meta ? (isGrounds ? GROUNDS_CHECKLIST : buildChecklist(meta.bedrooms)) : []
   const currentRoom = checklist[stepIndex]
   const isLastStep = stepIndex === checklist.length - 1
   const roomPhotos = currentRoom ? photos.filter(p => p.room === currentRoom.label) : []
-  const flaggedCount = photos.filter(p => p.damage?.flagged).length
-  const moldCount = photos.filter(p => p.mold?.flagged).length
+  const flaggedCount = photos.filter(p => p.issue?.flagged).length
 
   // On resume, load the saved visit and its photos from durable storage.
   useEffect(() => {
@@ -134,8 +145,15 @@ export default function Camera() {
     else setStepIndex(i => i + 1)
   }
 
+  function dismissIntro() {
+    try { localStorage.setItem(INTRO_SEEN_KEY, '1') } catch { /* ignore */ }
+    setShowIntro(false)
+  }
+
   // Save the photo to durable storage FIRST, then update the screen/advance.
-  async function addPhoto(file, asExtra) {
+  // asFlag=true means it was taken with the red ⚠️ shutter: we open the issue
+  // editor for it and only advance once the required note is saved.
+  async function addPhoto(file, { asExtra = false, asFlag = false } = {}) {
     // "multi" prompts (e.g. grounds "Any problem areas") keep every shot and
     // never auto-advance — the manager taps Finish when done.
     const isMulti = !asExtra && currentRoom.multi
@@ -147,8 +165,7 @@ export default function Camera() {
       file,
       room: asExtra ? 'Extra' : currentRoom.label,
       subject: asExtra ? 'Extra' : currentRoom.id,
-      damage: { flagged: false, note: '' },
-      mold: { flagged: false },
+      issue: { flagged: false, note: '' },
       takenAt: Date.now(),
     }
 
@@ -162,8 +179,7 @@ export default function Camera() {
         visitId: photo.visitId,
         room: photo.room,
         subject: photo.subject,
-        damage: photo.damage,
-        mold: photo.mold,
+        issue: photo.issue,
         blob: file,
         takenAt: photo.takenAt,
       })
@@ -177,10 +193,17 @@ export default function Camera() {
       ? [...photos, photo]
       : [...photos.filter(p => p.room !== currentRoom.label), photo]
     setPhotos(next)
-    if (!append) goNext(next)
+
+    if (asFlag) {
+      // Open the issue editor; advance to the next prompt only after the note
+      // is saved (and only for single prompts, not multi/extra).
+      openIssueEditor(photo, !append)
+    } else if (!append) {
+      goNext(next)
+    }
   }
 
-  function shoot(asExtra) {
+  function shoot(kind) {
     const video = videoRef.current
     if (!video || !video.videoWidth) return
     const canvas = document.createElement('canvas')
@@ -191,7 +214,7 @@ export default function Camera() {
       blob => {
         if (!blob) return
         const file = new File([blob], `${currentRoom.id || 'photo'}.jpg`, { type: 'image/jpeg' })
-        addPhoto(file, asExtra)
+        addPhoto(file, { asExtra: kind === 'extra', asFlag: kind === 'issue' })
       },
       'image/jpeg',
       0.9
@@ -201,39 +224,57 @@ export default function Camera() {
   function removePhoto(id) {
     deletePhotoRec(id)
     setPhotos(prev => prev.filter(p => p.id !== id))
-    if (editingId === id) setEditingId(null)
+    if (editingId === id) closeIssueEditor()
   }
 
-  function startFlag(photo) {
+  // Open the issue editor for a photo, preloading any existing flag details.
+  function openIssueEditor(photo, advance = false) {
     setEditingId(photo.id)
-    setNoteDraft(photo.damage?.note || '')
+    setIssueType(photo.issue?.typeId || '')
+    setCustomType(photo.issue?.customType || '')
+    setNoteDraft(photo.issue?.note || '')
+    setAdvanceAfter(advance)
   }
 
-  function saveNote() {
-    const damage = { flagged: true, note: noteDraft.trim() }
-    updatePhotoRec(editingId, { damage })
-    setPhotos(prev => prev.map(p => (p.id === editingId ? { ...p, damage } : p)))
+  function closeIssueEditor() {
     setEditingId(null)
+    setIssueType('')
+    setCustomType('')
     setNoteDraft('')
+    setAdvanceAfter(false)
   }
 
-  function clearFlag() {
-    const damage = { flagged: false, note: '' }
-    updatePhotoRec(editingId, { damage })
-    setPhotos(prev => prev.map(p => (p.id === editingId ? { ...p, damage } : p)))
-    setEditingId(null)
-    setNoteDraft('')
+  const chosenType = getIssueType(issueType)
+  const issueValid =
+    !!chosenType &&
+    noteDraft.trim().length >= MIN_NOTE_LENGTH &&
+    (!chosenType.custom || customType.trim().length > 0)
+
+  function saveIssue() {
+    if (!issueValid) return
+    const issue = {
+      flagged: true,
+      typeId: chosenType.id,
+      label: chosenType.label,
+      code: chosenType.code,
+      customType: chosenType.custom ? customType.trim() : '',
+      note: noteDraft.trim(),
+    }
+    updatePhotoRec(editingId, { issue })
+    setPhotos(prev => prev.map(p => (p.id === editingId ? { ...p, issue } : p)))
+    const shouldAdvance = advanceAfter
+    closeIssueEditor()
+    if (shouldAdvance) goNext()
   }
 
-  function toggleMold(id) {
-    setPhotos(prev =>
-      prev.map(p => {
-        if (p.id !== id) return p
-        const mold = { flagged: !p.mold?.flagged }
-        updatePhotoRec(id, { mold })
-        return { ...p, mold }
-      })
-    )
+  // Remove the flag but keep the photo (turns it back into a normal photo).
+  function clearIssue() {
+    const issue = { flagged: false, note: '' }
+    updatePhotoRec(editingId, { issue })
+    setPhotos(prev => prev.map(p => (p.id === editingId ? { ...p, issue } : p)))
+    const shouldAdvance = advanceAfter
+    closeIssueEditor()
+    if (shouldAdvance) goNext()
   }
 
   // Tap the top-left Back: everything is already saved, so just go home.
@@ -248,28 +289,20 @@ export default function Camera() {
   }
 
   function renderThumb(p) {
-    const cls = [
-      'photo-thumb',
-      p.damage?.flagged ? 'photo-flagged' : '',
-      p.mold?.flagged ? 'photo-molded' : '',
-    ].join(' ').trim()
+    const flagged = p.issue?.flagged
+    const cls = ['photo-thumb', flagged ? 'photo-flagged' : ''].join(' ').trim()
+    const badge = flagged ? (p.issue.customType?.trim() || p.issue.label) : ''
     return (
       <Thumb key={p.id} file={p.file} className={cls}>
         <button className="photo-remove" onClick={() => removePhoto(p.id)} aria-label="Remove photo">×</button>
         <button
-          className={`photo-flag ${p.damage?.flagged ? 'photo-flag-on' : ''}`}
-          onClick={() => startFlag(p)}
-          aria-label={p.damage?.flagged ? 'Edit damage note' : 'Flag damage'}
+          className={`photo-flag ${flagged ? 'photo-flag-on' : ''}`}
+          onClick={() => openIssueEditor(p, false)}
+          aria-label={flagged ? 'Edit issue' : 'Flag an issue'}
         >
           ⚠️
         </button>
-        <button
-          className={`photo-mold ${p.mold?.flagged ? 'photo-mold-on' : ''}`}
-          onClick={() => toggleMold(p.id)}
-          aria-label={p.mold?.flagged ? 'Unflag mold' : 'Flag mold'}
-        >
-          🍄
-        </button>
+        {badge && <span className="photo-issue-badge">{badge}</span>}
       </Thumb>
     )
   }
@@ -331,19 +364,19 @@ export default function Camera() {
         <button
           className="btn btn-secondary"
           disabled={camStatus !== 'ready'}
-          onClick={() => shoot(true)}
+          onClick={() => shoot('extra')}
         >
           ➕ Add extra (off-checklist) photo
         </button>
 
         <p className="context-line">
           {photos.length} photo{photos.length === 1 ? '' : 's'} so far
-          {flaggedCount > 0 && ` · ⚠️ ${flaggedCount} damage`}
-          {moldCount > 0 && ` · 🍄 ${moldCount} mold`}
+          {flaggedCount > 0 && ` · ⚠️ ${flaggedCount} issue${flaggedCount === 1 ? '' : 's'} flagged`}
         </p>
       </div>
 
-      {/* Pinned control row: step back · shutter · skip. Never moves between steps. */}
+      {/* Pinned control row. The two shutters sit side by side so a problem can
+          be flagged in one tap. Back and Skip flank them. Never moves. */}
       <div className="camera-footer">
         <div className="camera-controls">
           <button
@@ -353,43 +386,102 @@ export default function Camera() {
           >
             ← Back
           </button>
-          <button
-            className="shutter"
-            disabled={camStatus !== 'ready'}
-            onClick={() => shoot(false)}
-            aria-label="Take photo"
-          >
-            <span className="shutter-ring" />
-          </button>
+
+          <div className="shutter-pair">
+            <div className="shutter-cell">
+              <button
+                className="shutter"
+                disabled={camStatus !== 'ready'}
+                onClick={() => shoot('photo')}
+                aria-label="Take a normal photo"
+              >
+                <span className="shutter-ring" />
+              </button>
+              <span className="shutter-label">Photo</span>
+            </div>
+            <div className="shutter-cell">
+              <button
+                className="shutter shutter-issue"
+                disabled={camStatus !== 'ready'}
+                onClick={() => shoot('issue')}
+                aria-label="Take a photo and flag a problem"
+              >
+                <span className="shutter-issue-icon">⚠️</span>
+              </button>
+              <span className="shutter-label shutter-label-issue">Issue</span>
+            </div>
+          </div>
+
           <button className="ctrl-btn" onClick={() => goNext(photos)}>
             {isLastStep ? 'Finish →' : 'Skip →'}
           </button>
         </div>
       </div>
 
+      {/* One-time intro explaining the two shutters. */}
+      {showIntro && (
+        <div className="modal-backdrop" onClick={dismissIntro}>
+          <div className="modal intro-modal" onClick={e => e.stopPropagation()}>
+            <h3>Two buttons, two jobs</h3>
+            <p className="intro-line">
+              <span className="intro-swatch intro-swatch-blue" />
+              <span><strong>Blue button</strong> = take a normal photo.</span>
+            </p>
+            <p className="intro-line">
+              <span className="intro-swatch intro-swatch-red">⚠️</span>
+              <span>
+                <strong>Red ⚠️ button</strong> = flag a problem (mold, damage,
+                hole, etc.) — you'll pick the type and add a note.
+              </span>
+            </p>
+            <button className="btn btn-primary" onClick={dismissIntro}>Got it</button>
+          </div>
+        </div>
+      )}
+
+      {/* Issue editor: pick a type + required note. */}
       {editingId && (
-        <div className="modal-backdrop" onClick={() => setEditingId(null)}>
+        <div className="modal-backdrop" onClick={closeIssueEditor}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>⚠️ Describe the damage</h3>
-            <p className="note">A short note is required to flag this photo.</p>
+            <h3>⚠️ Flag a problem</h3>
+            <p className="note">Pick the type of problem and add a short note.</p>
+
+            <div className="issue-type-grid">
+              {ISSUE_TYPES.map(t => (
+                <button
+                  key={t.id}
+                  className={`issue-type-chip ${issueType === t.id ? 'issue-type-chip-on' : ''}`}
+                  onClick={() => setIssueType(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {chosenType?.custom && (
+              <input
+                className="note-input"
+                type="text"
+                placeholder="Type the problem (e.g. Loose railing)"
+                value={customType}
+                onChange={e => setCustomType(e.target.value)}
+              />
+            )}
+
             <textarea
               className="note-input"
               rows={3}
               placeholder="e.g. Cracked tile under sink, water stain on ceiling"
               value={noteDraft}
-              autoFocus
               onChange={e => setNoteDraft(e.target.value)}
             />
+
             <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={clearFlag}>
-                Remove flag
+              <button className="btn btn-secondary" onClick={clearIssue}>
+                Not an issue
               </button>
-              <button
-                className="btn btn-primary"
-                disabled={noteDraft.trim().length < MIN_NOTE_LENGTH}
-                onClick={saveNote}
-              >
-                Save note
+              <button className="btn btn-primary" disabled={!issueValid} onClick={saveIssue}>
+                Save issue
               </button>
             </div>
           </div>

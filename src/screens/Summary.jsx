@@ -26,8 +26,14 @@ export default function Summary() {
     return () => { cancelled = true }
   }, [visitId])
 
-  const flaggedCount = photos.filter(p => p.damage?.flagged).length
-  const moldCount = photos.filter(p => p.mold?.flagged).length
+  const flaggedCount = photos.filter(p => p.issue?.flagged).length
+  // Count flagged issues grouped by type (custom "Other" types use their text).
+  const issuesByType = photos.reduce((acc, p) => {
+    if (!p.issue?.flagged) return acc
+    const label = p.issue.customType?.trim() || p.issue.label || 'Issue'
+    acc[label] = (acc[label] || 0) + 1
+    return acc
+  }, {})
   const busy = status === 'uploading'
 
   function deletePhoto(id) {
@@ -79,8 +85,12 @@ export default function Summary() {
           <div className="summary-row"><span>Visit Type</span><strong>{state?.visitType}</strong></div>
           <div className="summary-row"><span>Date</span><strong>{today}</strong></div>
           <div className="summary-row"><span>Photos</span><strong>{photos.length}</strong></div>
-          <div className="summary-row"><span>⚠️ Damage flagged</span><strong>{flaggedCount}</strong></div>
-          <div className="summary-row"><span>🍄 Mold flagged</span><strong>{moldCount}</strong></div>
+          <div className="summary-row"><span>⚠️ Issues flagged</span><strong>{flaggedCount}</strong></div>
+          {Object.entries(issuesByType).map(([label, count]) => (
+            <div className="summary-row summary-row-sub" key={label}>
+              <span>— {label}</span><strong>{count}</strong>
+            </div>
+          ))}
         </div>
 
         {status === 'done' ? (
@@ -96,11 +106,9 @@ export default function Summary() {
                 <p className="context-line">Review photos — tap × to delete any before uploading.</p>
                 <div className="photo-grid">
                   {photos.map(p => {
-                    const cls = [
-                      'photo-thumb',
-                      p.damage?.flagged ? 'photo-flagged' : '',
-                      p.mold?.flagged ? 'photo-molded' : '',
-                    ].join(' ').trim()
+                    const flagged = p.issue?.flagged
+                    const cls = ['photo-thumb', flagged ? 'photo-flagged' : ''].join(' ').trim()
+                    const badge = flagged ? (p.issue.customType?.trim() || p.issue.label) : ''
                     return (
                       <Thumb key={p.id} file={p.blob} className={cls}>
                         {!busy && (
@@ -112,6 +120,7 @@ export default function Summary() {
                             ×
                           </button>
                         )}
+                        {badge && <span className="photo-issue-badge">{badge}</span>}
                       </Thumb>
                     )
                   })}

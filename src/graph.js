@@ -141,8 +141,10 @@ export async function uploadVisit({ meta, photos, onProgress, onStatus }) {
   for (let i = 0; i < sorted.length; i++) {
     const p = sorted[i]
     const seq = i + 1
-    const flags = `${p.damage?.flagged ? '_DAMAGE' : ''}${p.mold?.flagged ? '_MOLD' : ''}`
-    const filename = `${prefix}_${typeC}_${dateStr}_${p.subject || 'Photo'}${flags}_${pad3(seq)}.jpg`
+    // A flagged photo carries its issue code in the filename (e.g. _HOLE_,
+    // _MOLD_; custom "Other" types use the generic _ISSUE_ marker).
+    const flag = p.issue?.flagged ? `_${p.issue.code || 'ISSUE'}` : ''
+    const filename = `${prefix}_${typeC}_${dateStr}_${p.subject || 'Photo'}${flag}_${pad3(seq)}.jpg`
     onStatus?.(`Uploading photo ${seq} of ${sorted.length}…`)
     await uploadFileChunked(driveId, token, folderSegments, filename, p.blob, frac => {
       onProgress?.((i + frac) / steps)
@@ -152,9 +154,20 @@ export async function uploadVisit({ meta, photos, onProgress, onStatus }) {
       room: p.room,
       subject: p.subject,
       takenAt: new Date(p.takenAt).toISOString(),
-      damage: p.damage?.flagged ? { note: p.damage.note } : null,
-      mold: !!p.mold?.flagged,
+      issue: p.issue?.flagged
+        ? {
+            type: p.issue.customType?.trim() || p.issue.label || 'Issue',
+            code: p.issue.code || 'ISSUE',
+            note: p.issue.note || '',
+          }
+        : null,
     })
+  }
+
+  // Tally flagged issues by type for the visit summary in _visit.json.
+  const issueCounts = {}
+  for (const m of manifest) {
+    if (m.issue) issueCounts[m.issue.type] = (issueCounts[m.issue.type] || 0) + 1
   }
 
   onStatus?.('Saving visit details…')
@@ -168,8 +181,8 @@ export async function uploadVisit({ meta, photos, onProgress, onStatus }) {
     date: dateStr,
     uploadedAt: new Date().toISOString(),
     photoCount: manifest.length,
-    damageFlagged: manifest.filter(m => m.damage).length,
-    moldFlagged: manifest.filter(m => m.mold).length,
+    issuesFlagged: manifest.filter(m => m.issue).length,
+    issuesByType: issueCounts,
     photos: manifest,
   })
   onProgress?.(1)
