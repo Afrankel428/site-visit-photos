@@ -370,6 +370,11 @@ h1 { font-size: 26px; font-weight: 700; }
 .step-nav { display: flex; gap: 10px; }
 .step-nav .btn { flex: 1; }
 
+.grounds-block { display: flex; flex-direction: column; gap: 8px; }
+.grounds-or { text-align: center; color: var(--muted); font-size: 14px; }
+.grounds-btn { width: 100%; }
+.grounds-block .note { text-align: center; }
+
 .divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 
 .photo-grid {
