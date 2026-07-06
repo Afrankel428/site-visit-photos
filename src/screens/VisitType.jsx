@@ -5,7 +5,9 @@ const VISIT_TYPES = [
   { id: 'move-out', label: 'Move-Out', icon: '📦' },
   { id: 'routine', label: 'Routine Inspection', icon: '🔍' },
   { id: 'maintenance', label: 'Maintenance', icon: '🔧' },
-  { id: 'general', label: 'General Site Visit', icon: '🏢' },
+  // "General Site Visit" was removed — Routine Inspection already covers it
+  // (e.g. pest control). The property-wide Grounds Walkthrough is separate and
+  // lives on the Property screen, not here.
 ]
 
 export default function VisitType() {
