@@ -17,7 +17,9 @@ export const PROPERTIES = [
   {
     id: 'milan',
     name: 'Milan Luxury Apartments',
+    shortName: 'Milan', // used as the filename prefix for grounds photos
     address: '4051 Reasons Boulevard, Milan, TN 38358',
+    grounds: true, // offers a property-wide "Grounds Walkthrough" (no unit)
     units: [
       // 2 bedroom / 2 bath (32 units)
       ...units(

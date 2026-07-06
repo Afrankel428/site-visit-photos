@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { buildChecklist } from '../checklist'
+import { GROUNDS_CHECKLIST } from '../groundsChecklist'
 import Thumb from '../Thumb'
 import {
   saveVisitMeta,
@@ -33,6 +34,8 @@ export default function Camera() {
           visitType: state?.visitType,
           bedrooms: state?.bedrooms,
           bathrooms: state?.bathrooms,
+          mode: state?.mode,           // 'grounds' for the property-wide walk
+          shortName: state?.shortName, // filename prefix for grounds photos
         }
   )
   const [loaded, setLoaded] = useState(!resuming)
@@ -44,7 +47,8 @@ export default function Camera() {
   const [camStatus, setCamStatus] = useState('starting')
   const [camError, setCamError] = useState('')
 
-  const checklist = meta ? buildChecklist(meta.bedrooms) : []
+  const isGrounds = meta?.mode === 'grounds'
+  const checklist = meta ? (isGrounds ? GROUNDS_CHECKLIST : buildChecklist(meta.bedrooms)) : []
   const currentRoom = checklist[stepIndex]
   const isLastStep = stepIndex === checklist.length - 1
   const roomPhotos = currentRoom ? photos.filter(p => p.room === currentRoom.label) : []
@@ -65,6 +69,8 @@ export default function Camera() {
         visitType: v.visitType,
         bedrooms: v.bedrooms,
         bathrooms: v.bathrooms,
+        mode: v.mode,
+        shortName: v.shortName,
       })
       const stored = await loadPhotos(v.id)
       if (cancelled) return
@@ -130,6 +136,11 @@ export default function Camera() {
 
   // Save the photo to durable storage FIRST, then update the screen/advance.
   async function addPhoto(file, asExtra) {
+    // "multi" prompts (e.g. grounds "Any problem areas") keep every shot and
+    // never auto-advance — the manager taps Finish when done.
+    const isMulti = !asExtra && currentRoom.multi
+    const append = asExtra || isMulti
+
     const photo = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       visitId: visitIdRef.current,
@@ -141,8 +152,9 @@ export default function Camera() {
       takenAt: Date.now(),
     }
 
-    // One photo per checklist prompt: re-shooting replaces the old one.
-    const replaced = asExtra ? [] : photos.filter(p => p.room === currentRoom.label)
+    // One photo per single prompt: re-shooting replaces the old one.
+    // Extra and multi prompts append instead (nothing replaced).
+    const replaced = append ? [] : photos.filter(p => p.room === currentRoom.label)
 
     try {
       await savePhoto({
@@ -161,11 +173,11 @@ export default function Camera() {
       setCamError('Could not save that photo — please try again.')
     }
 
-    const next = asExtra
+    const next = append
       ? [...photos, photo]
       : [...photos.filter(p => p.room !== currentRoom.label), photo]
     setPhotos(next)
-    if (!asExtra) goNext(next)
+    if (!append) goNext(next)
   }
 
   function shoot(asExtra) {
@@ -282,7 +294,11 @@ export default function Camera() {
 
       {/* Everything above the controls scrolls; the control row below stays pinned. */}
       <div className="camera-scroll">
-        <p className="context-line">{meta.property} — Unit {meta.unit} — {meta.visitType}</p>
+        <p className="context-line">
+          {isGrounds
+            ? `${meta.property} — ${meta.visitType}`
+            : `${meta.property} — Unit ${meta.unit} — ${meta.visitType}`}
+        </p>
 
         <div className="step-banner">
           <span className="step-count">Step {stepIndex + 1} of {checklist.length}</span>

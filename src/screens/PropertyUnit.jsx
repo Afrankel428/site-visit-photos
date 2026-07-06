@@ -17,6 +17,7 @@ export default function PropertyUnit() {
   const [inProgress, setInProgress] = useState(null) // a saved, unfinished visit
   const [inProgressCount, setInProgressCount] = useState(0)
   const [confirmNew, setConfirmNew] = useState(false) // discard-unfinished prompt
+  const [pendingAction, setPendingAction] = useState('unit') // 'unit' | 'grounds'
 
   // Look for an in-progress visit to offer resuming.
   useEffect(() => {
@@ -64,16 +65,29 @@ export default function PropertyUnit() {
     }
   }
 
-  // Tapping Next: if there's an unfinished visit, ask before discarding it.
-  function next() {
+  // Ask before discarding an unfinished visit, then run the chosen action.
+  // action is 'unit' (normal unit walk) or 'grounds' (property-wide walk).
+  function requestStart(action) {
+    setPendingAction(action)
     if (inProgress) {
       setConfirmNew(true)
+    } else {
+      run(action)
+    }
+  }
+
+  const next = () => requestStart('unit')
+  const startGrounds = () => requestStart('grounds')
+
+  function run(action) {
+    if (action === 'grounds') {
+      proceedGrounds()
     } else {
       proceed()
     }
   }
 
-  // Actually start the new visit (after any confirmation).
+  // Actually start the new UNIT visit (after any confirmation).
   function proceed() {
     // Remember a newly typed (non-onboarded) property for next time.
     if (newProperty.trim() && !getProperty(newProperty)) {
@@ -89,13 +103,25 @@ export default function PropertyUnit() {
     }
   }
 
-  // Confirmed "start new": discard the unfinished visit, then proceed.
+  // Start the property-wide Grounds Walkthrough (no unit, no visit-type screen).
+  function proceedGrounds() {
+    navigate('/camera', {
+      state: {
+        property: onboarded.name,
+        shortName: onboarded.shortName || onboarded.name,
+        mode: 'grounds',
+        visitType: 'Grounds Walkthrough',
+      },
+    })
+  }
+
+  // Confirmed "start new": discard the unfinished visit, then run the action.
   function discardAndProceed() {
     const id = inProgress.id
     setConfirmNew(false)
     deleteVisit(id).then(() => {
       setInProgress(null)
-      proceed()
+      run(pendingAction)
     })
   }
 
@@ -115,8 +141,9 @@ export default function PropertyUnit() {
         {inProgress && (
           <div className="resume-banner">
             <p className="resume-title">
-              You're in the middle of Unit {inProgress.unit}
-              {inProgress.property ? ` at ${inProgress.property}` : ''}.
+              {inProgress.mode === 'grounds'
+                ? `You're in the middle of a Grounds Walkthrough${inProgress.property ? ` at ${inProgress.property}` : ''}.`
+                : `You're in the middle of Unit ${inProgress.unit}${inProgress.property ? ` at ${inProgress.property}` : ''}.`}
             </p>
             <p className="resume-sub">
               {inProgressCount} photo{inProgressCount === 1 ? '' : 's'} saved. Finish it?
@@ -126,7 +153,7 @@ export default function PropertyUnit() {
                 className="btn btn-primary"
                 onClick={() => navigate('/camera', { state: { resume: true } })}
               >
-                Resume Unit {inProgress.unit}
+                {inProgress.mode === 'grounds' ? 'Resume Grounds Walkthrough' : `Resume Unit ${inProgress.unit}`}
               </button>
               <button className="btn btn-secondary" onClick={discardInProgress}>
                 Discard
@@ -246,6 +273,16 @@ export default function PropertyUnit() {
         <button className="btn btn-primary" disabled={!canContinue} onClick={next}>
           Next
         </button>
+
+        {onboarded?.grounds && (
+          <div className="grounds-block">
+            <p className="grounds-or">— or —</p>
+            <button className="btn btn-secondary grounds-btn" onClick={startGrounds}>
+              🌳 Grounds Walkthrough (whole property)
+            </button>
+            <p className="note">A guided walk of the property grounds — no unit needed.</p>
+          </div>
+        )}
       </div>
 
       {confirmNew && inProgress && (

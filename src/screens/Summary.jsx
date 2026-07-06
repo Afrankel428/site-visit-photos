@@ -47,6 +47,8 @@ export default function Summary() {
           visitType: state.visitType,
           bedrooms: state.bedrooms,
           bathrooms: state.bathrooms,
+          mode: state.mode,
+          shortName: state.shortName,
         },
         photos,
         onProgress: setProgress,
@@ -71,7 +73,9 @@ export default function Summary() {
       <div className="screen-content">
         <div className="summary-card">
           <div className="summary-row"><span>Property</span><strong>{state?.property}</strong></div>
-          <div className="summary-row"><span>Unit</span><strong>{state?.unit}</strong></div>
+          {state?.mode === 'grounds'
+            ? <div className="summary-row"><span>Scope</span><strong>Whole property (grounds)</strong></div>
+            : <div className="summary-row"><span>Unit</span><strong>{state?.unit}</strong></div>}
           <div className="summary-row"><span>Visit Type</span><strong>{state?.visitType}</strong></div>
           <div className="summary-row"><span>Date</span><strong>{today}</strong></div>
           <div className="summary-row"><span>Photos</span><strong>{photos.length}</strong></div>

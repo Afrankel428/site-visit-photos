@@ -119,13 +119,22 @@ export async function uploadVisit({ meta, photos, onProgress, onStatus }) {
   const sorted = [...photos].sort((a, b) => (a.takenAt || 0) - (b.takenAt || 0))
   const dateTs = sorted.length ? sorted[0].takenAt : Date.now()
   const dateStr = ymd(dateTs)
-  const dateFolder = safeName(`${dateStr} — ${meta.visitType}`)
-  const folderSegments = [safeName(meta.property), safeName(meta.unit), dateFolder]
+  const isGrounds = meta.mode === 'grounds'
+
+  // Property-wide grounds walk skips the unit level:
+  //   /<Property>/Grounds Walkthrough/<YYYY-MM-DD>/
+  // Unit walk keeps the unit + "<date> — <type>" folder:
+  //   /<Property>/<Unit>/<YYYY-MM-DD — Visit Type>/
+  const folderSegments = isGrounds
+    ? [safeName(meta.property), 'Grounds Walkthrough', safeName(dateStr)]
+    : [safeName(meta.property), safeName(meta.unit), safeName(`${dateStr} — ${meta.visitType}`)]
 
   onStatus?.('Creating folders…')
   await ensureFolder(driveId, token, folderSegments)
 
   const typeC = compact(meta.visitType)
+  // Filename prefix: "Milan" for grounds, "Unit1-101" for a unit walk.
+  const prefix = isGrounds ? compact(meta.shortName || meta.property) : `Unit${safeName(meta.unit)}`
   const steps = sorted.length + 1 // photos + _visit.json
   const manifest = []
 
@@ -133,7 +142,7 @@ export async function uploadVisit({ meta, photos, onProgress, onStatus }) {
     const p = sorted[i]
     const seq = i + 1
     const flags = `${p.damage?.flagged ? '_DAMAGE' : ''}${p.mold?.flagged ? '_MOLD' : ''}`
-    const filename = `Unit${safeName(meta.unit)}_${typeC}_${dateStr}_${p.subject || 'Photo'}${flags}_${pad3(seq)}.jpg`
+    const filename = `${prefix}_${typeC}_${dateStr}_${p.subject || 'Photo'}${flags}_${pad3(seq)}.jpg`
     onStatus?.(`Uploading photo ${seq} of ${sorted.length}…`)
     await uploadFileChunked(driveId, token, folderSegments, filename, p.blob, frac => {
       onProgress?.((i + frac) / steps)
@@ -151,7 +160,8 @@ export async function uploadVisit({ meta, photos, onProgress, onStatus }) {
   onStatus?.('Saving visit details…')
   await uploadJson(driveId, token, folderSegments, '_visit.json', {
     property: meta.property,
-    unit: meta.unit,
+    unit: isGrounds ? null : meta.unit,
+    scope: isGrounds ? 'grounds' : 'unit',
     visitType: meta.visitType,
     bedrooms: meta.bedrooms ?? null,
     bathrooms: meta.bathrooms ?? null,
