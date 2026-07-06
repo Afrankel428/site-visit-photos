@@ -9,7 +9,8 @@
 //
 //   visits: { id, property, unit, visitType, bedrooms, bathrooms,
 //             stepIndex, status: 'in-progress' | 'completed', updatedAt }
-//   photos: { id, visitId, room, subject, damage, mold, blob, takenAt }
+//   photos: { id, visitId, room, subject, issue, blob, takenAt }
+//     issue: { flagged, typeId, label, code, customType, note }
 
 const DB_NAME = 'svp'
 const DB_VERSION = 2
