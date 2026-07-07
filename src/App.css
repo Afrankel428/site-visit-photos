@@ -586,6 +586,8 @@ h1 { font-size: 26px; font-weight: 700; }
 
 .summary-row:last-child { border-bottom: none; }
 .summary-row span { color: var(--muted); }
+.multi-hint { font-size: 13px; color: var(--muted); margin-top: -6px; }
+
 .summary-row-sub { padding-top: 8px; padding-bottom: 8px; font-size: 14px; }
 .summary-row-sub span { padding-left: 6px; }
 
