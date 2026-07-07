@@ -15,7 +15,7 @@ import {
 } from '../visitStore'
 
 const MIN_NOTE_LENGTH = 3
-const INTRO_SEEN_KEY = 'svp.cameraIntroSeen'
+const INTRO_SEEN_KEY = 'svp.cameraIntroSeen.v2'
 
 export default function Camera() {
   const navigate = useNavigate()
@@ -424,8 +424,8 @@ export default function Camera() {
           <div className="modal intro-modal" onClick={e => e.stopPropagation()}>
             <h3>Two buttons, two jobs</h3>
             <p className="intro-line">
-              <span className="intro-swatch intro-swatch-blue" />
-              <span><strong>Blue button</strong> = take a normal photo.</span>
+              <span className="intro-swatch intro-swatch-green" />
+              <span><strong>Green button</strong> = take a normal photo.</span>
             </p>
             <p className="intro-line">
               <span className="intro-swatch intro-swatch-red">⚠️</span>

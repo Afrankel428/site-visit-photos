@@ -350,8 +350,8 @@ h1 { font-size: 26px; font-weight: 700; }
   width: 74px;
   height: 74px;
   border-radius: 50%;
-  border: 4px solid var(--blue);
-  background: #fff;
+  border: 4px solid #1e9e57;
+  background: #1e9e57;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -359,12 +359,13 @@ h1 { font-size: 26px; font-weight: 700; }
   padding: 0;
 }
 .shutter:active { transform: scale(0.94); }
-.shutter:disabled { border-color: var(--muted); opacity: 0.5; }
+.shutter:disabled { border-color: var(--muted); background: var(--muted); opacity: 0.5; }
 .shutter-ring {
-  width: 56px;
-  height: 56px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: var(--blue);
+  border: 3px solid #fff;
+  background: transparent;
 }
 
 /* Two shutters side by side, each with a permanent label underneath. */
@@ -383,7 +384,7 @@ h1 { font-size: 26px; font-weight: 700; }
 .shutter-label {
   font-size: 12px;
   font-weight: 700;
-  color: var(--blue);
+  color: #1e9e57;
   letter-spacing: 0.02em;
 }
 .shutter-label-issue { color: #d0021b; }
@@ -454,7 +455,7 @@ h1 { font-size: 26px; font-weight: 700; }
   justify-content: center;
   font-size: 18px;
 }
-.intro-swatch-blue { background: #fff; border: 4px solid var(--blue); }
+.intro-swatch-green { background: #1e9e57; }
 .intro-swatch-red { background: #d0021b; }
 
 .step-nav { display: flex; gap: 10px; }
