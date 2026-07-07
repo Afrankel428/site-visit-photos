@@ -588,6 +588,77 @@ h1 { font-size: 26px; font-weight: 700; }
 .summary-row span { color: var(--muted); }
 .multi-hint { font-size: 13px; color: var(--muted); margin-top: -6px; }
 
+/* Tappable live photo counter → opens the gallery. */
+.photo-counter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.photo-counter-view { margin-left: auto; color: var(--blue); font-weight: 700; }
+
+/* Hidden spacer keeps the shutters centered when a nav button is absent. */
+.ctrl-btn-hidden { visibility: hidden; pointer-events: none; }
+
+/* Full-screen browsable gallery overlay. */
+.gallery-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: var(--bg, #fff);
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.gallery-header { position: sticky; top: 0; }
+.gallery-empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 16px;
+}
+.gallery-cell {
+  position: relative;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.gallery-full {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.gallery-full-inner {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.gallery-full-img { width: 100%; border-radius: var(--radius); overflow: hidden; }
+.gallery-full-img img { width: 100%; height: auto; display: block; }
+.gallery-full-actions { display: flex; gap: 10px; }
+.gallery-full-actions .btn { flex: 1; }
+
+.btn-danger { background: #d0021b; color: #fff; border: none; }
+
 /* Flash/torch toggle, floating in the top-right of the live viewfinder. */
 .torch-toggle {
   position: absolute;
