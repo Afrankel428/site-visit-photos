@@ -47,6 +47,12 @@ export default function Camera() {
   const [camStatus, setCamStatus] = useState('starting')
   const [camError, setCamError] = useState('')
 
+  // Flash/torch: only offered when the device+browser support it.
+  const [torchSupported, setTorchSupported] = useState(false)
+  const [torchOn, setTorchOn] = useState(false)
+  // After a dark capture we offer a quick retake ({ id } of the saved photo).
+  const [darkPromptId, setDarkPromptId] = useState(null)
+
   // Issue editor (opened by the red ⚠️ shutter or a thumbnail's flag button).
   const [editingId, setEditingId] = useState(null)
   const [issueType, setIssueType] = useState('')   // chosen issue-type id
@@ -121,6 +127,13 @@ export default function Camera() {
         videoRef.current.srcObject = stream
         await videoRef.current.play().catch(() => {})
       }
+      // Detect flash/torch support (many devices/browsers have none).
+      try {
+        const track = stream.getVideoTracks?.()[0]
+        const caps = track?.getCapabilities?.() || {}
+        setTorchSupported(!!caps.torch)
+      } catch { setTorchSupported(false) }
+      setTorchOn(false)
       setCamStatus('ready')
     } catch (err) {
       setCamStatus('error')
@@ -155,7 +168,7 @@ export default function Camera() {
   // earlier one) and the walk never auto-advances — the manager taps Next/Skip
   // when they're done with the prompt. asFlag=true (red ⚠️ shutter) opens the
   // issue editor for the just-taken photo to capture its required note.
-  async function addPhoto(file, { asExtra = false, asFlag = false } = {}) {
+  async function addPhoto(file, { asExtra = false, asFlag = false, dark = false } = {}) {
     const photo = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       visitId: visitIdRef.current,
@@ -186,6 +199,26 @@ export default function Camera() {
     if (asFlag) {
       // A flagged photo needs its type + required note; never auto-advances.
       openIssueEditor(photo, false)
+    } else if (dark) {
+      // Non-flagged but dark: offer a quick retake (works even with no torch).
+      setDarkPromptId(photo.id)
+    }
+  }
+
+  // Rough average brightness (0–255) of the captured frame, sampled sparsely.
+  function frameBrightness(ctx, w, h) {
+    try {
+      const { data } = ctx.getImageData(0, 0, w, h)
+      let sum = 0
+      let n = 0
+      // Sample every ~40th pixel (stride of 160 bytes) — plenty for an average.
+      for (let i = 0; i < data.length; i += 160) {
+        sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+        n++
+      }
+      return n ? sum / n : 255
+    } catch {
+      return 255 // if we can't read pixels, don't nag the user
     }
   }
 
@@ -195,16 +228,44 @@ export default function Camera() {
     const canvas = document.createElement('canvas')
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
-    canvas.getContext('2d').drawImage(video, 0, 0)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(video, 0, 0)
+    // Only warn on genuinely dark frames, and not for issue shots (they already
+    // open the note editor — we avoid stacking two prompts).
+    const dark = kind !== 'issue' && frameBrightness(ctx, canvas.width, canvas.height) < 45
     canvas.toBlob(
       blob => {
         if (!blob) return
         const file = new File([blob], `${currentRoom.id || 'photo'}.jpg`, { type: 'image/jpeg' })
-        addPhoto(file, { asExtra: kind === 'extra', asFlag: kind === 'issue' })
+        addPhoto(file, { asExtra: kind === 'extra', asFlag: kind === 'issue', dark })
       },
       'image/jpeg',
       0.9
     )
+  }
+
+  // Manual flash/torch toggle. Fails gracefully by hiding itself if the device
+  // rejects the constraint (support can be reported but not actually work).
+  async function toggleTorch() {
+    const track = streamRef.current?.getVideoTracks?.()[0]
+    if (!track) return
+    const next = !torchOn
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next }] })
+      setTorchOn(next)
+    } catch {
+      setTorchSupported(false)
+      setTorchOn(false)
+    }
+  }
+
+  // Dark-photo prompt actions.
+  function keepDarkPhoto() {
+    setDarkPromptId(null)
+  }
+  function retakeDarkPhoto() {
+    if (darkPromptId) removePhoto(darkPromptId)
+    setDarkPromptId(null)
   }
 
   function removePhoto(id) {
@@ -347,6 +408,16 @@ export default function Camera() {
               <button className="btn btn-primary" onClick={startCamera}>Enable camera</button>
             </div>
           )}
+          {/* Flash/torch toggle — only shown when the device supports it. */}
+          {camStatus === 'ready' && torchSupported && (
+            <button
+              className={`torch-toggle ${torchOn ? 'torch-on' : ''}`}
+              onClick={toggleTorch}
+              aria-label={torchOn ? 'Turn flashlight off' : 'Turn flashlight on'}
+            >
+              🔦 {torchOn ? 'On' : 'Off'}
+            </button>
+          )}
         </div>
 
         {roomPhotos.length > 0 && <div className="photo-grid">{roomPhotos.map(renderThumb)}</div>}
@@ -425,6 +496,24 @@ export default function Camera() {
               </span>
             </p>
             <button className="btn btn-primary" onClick={dismissIntro}>Got it</button>
+          </div>
+        </div>
+      )}
+
+      {/* Dark-photo prompt — offered after a dark capture (torch or not). */}
+      {darkPromptId && (
+        <div className="modal-backdrop" onClick={keepDarkPhoto}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>🌒 This photo looks dark</h3>
+            <p className="note">
+              {torchSupported
+                ? 'Turn on the flashlight (🔦 in the corner of the camera) and retake, or keep this one.'
+                : 'Add more light if you can, then retake — or keep this one.'}
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={keepDarkPhoto}>Keep it</button>
+              <button className="btn btn-primary" onClick={retakeDarkPhoto}>Retake</button>
+            </div>
           </div>
         </div>
       )}
