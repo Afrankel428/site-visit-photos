@@ -5,6 +5,7 @@ import { GROUNDS_CHECKLIST } from '../groundsChecklist'
 import { ISSUE_TYPES, getIssueType } from '../issueTypes'
 import { labelToSubject } from '../areas'
 import Thumb from '../Thumb'
+import PhotoGallery from '../PhotoGallery'
 import {
   saveVisitMeta,
   getInProgressVisit,
@@ -22,10 +23,14 @@ export default function Camera() {
   const navigate = useNavigate()
   const { state } = useLocation()
   const resuming = !!state?.resume
+  // extraOnly: re-entered from the Summary screen just to add more extra photos
+  // to an already-finished visit. Reuses this exact in-app camera.
+  const extraOnly = !!state?.extraOnly
   const videoRef = useRef(null)
   const streamRef = useRef(null)
-  // Stable visit id for this walkthrough (new visits get a fresh one).
-  const visitIdRef = useRef(`v-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  // Stable visit id for this walkthrough (new visits get a fresh one; extraOnly
+  // and resume reuse the existing visit's id).
+  const visitIdRef = useRef(state?.visitId || `v-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
   // Visit details: from the flow for a new visit, or loaded from storage on resume.
   const [meta, setMeta] = useState(
@@ -66,6 +71,12 @@ export default function Camera() {
   const [labelChoice, setLabelChoice] = useState('') // area id or 'custom'
   const [customLabel, setCustomLabel] = useState('')
 
+  // Extra-photo mode: the green/red shutters capture off-checklist extras
+  // (each gets a label). Entered via "Add extra photos" or the Summary screen.
+  const [extraMode, setExtraMode] = useState(extraOnly)
+  // Gallery overlay of everything shot so far this visit.
+  const [showGallery, setShowGallery] = useState(false)
+
   // One-time intro overlay explaining the two shutter buttons.
   const [showIntro, setShowIntro] = useState(() => {
     try { return !localStorage.getItem(INTRO_SEEN_KEY) } catch { return false }
@@ -76,6 +87,8 @@ export default function Camera() {
   const currentRoom = checklist[stepIndex]
   const isLastStep = stepIndex === checklist.length - 1
   const roomPhotos = currentRoom ? photos.filter(p => p.room === currentRoom.label) : []
+  const extraPhotos = photos.filter(p => p.room === 'Extra')
+  const gridPhotos = extraMode ? extraPhotos : roomPhotos
   const flaggedCount = photos.filter(p => p.issue?.flagged).length
 
   // On resume, load the saved visit and its photos from durable storage.
@@ -104,9 +117,21 @@ export default function Camera() {
     return () => { cancelled = true }
   }, [resuming])
 
-  // Keep the (tiny) visit record up to date — never rewrites photos.
+  // extraOnly: re-opened from the Summary to add more extras to a finished
+  // visit — load its existing photos so the counter/gallery are accurate.
   useEffect(() => {
-    if (!loaded || !meta) return
+    if (!extraOnly || !state?.visitId) return
+    let cancelled = false
+    loadPhotos(state.visitId).then(stored => {
+      if (!cancelled) setPhotos(stored.map(p => ({ ...p, file: p.blob })))
+    })
+    return () => { cancelled = true }
+  }, [extraOnly, state])
+
+  // Keep the (tiny) visit record up to date — never rewrites photos.
+  // Skipped in extraOnly mode so a finished visit is never reverted to open.
+  useEffect(() => {
+    if (!loaded || !meta || extraOnly) return
     saveVisitMeta({
       id: visitIdRef.current,
       ...meta,
@@ -114,7 +139,7 @@ export default function Camera() {
       status: 'in-progress',
       updatedAt: Date.now(),
     })
-  }, [stepIndex, loaded, meta])
+  }, [stepIndex, loaded, meta, extraOnly])
 
   async function startCamera() {
     setCamStatus('starting')
@@ -246,7 +271,8 @@ export default function Camera() {
       blob => {
         if (!blob) return
         const file = new File([blob], `${currentRoom.id || 'photo'}.jpg`, { type: 'image/jpeg' })
-        addPhoto(file, { asExtra: kind === 'extra', asFlag: kind === 'issue', dark })
+        // In extra mode the green/red shutters both capture off-checklist extras.
+        addPhoto(file, { asExtra: extraMode || kind === 'extra', asFlag: kind === 'issue', dark })
       },
       'image/jpeg',
       0.9
@@ -345,8 +371,14 @@ export default function Camera() {
     updatePhotoRec(editingId, { issue })
     setPhotos(prev => prev.map(p => (p.id === editingId ? { ...p, issue } : p)))
     const shouldAdvance = advanceAfter
+    const flaggedPhoto = photos.find(p => p.id === editingId)
     closeIssueEditor()
-    if (shouldAdvance) goNext()
+    // A flagged EXTRA still needs its area/label — chain the label editor.
+    if (flaggedPhoto && flaggedPhoto.room === 'Extra' && !flaggedPhoto.label) {
+      openLabelEditor(flaggedPhoto)
+    } else if (shouldAdvance) {
+      goNext()
+    }
   }
 
   // Remove the flag but keep the photo (turns it back into a normal photo).
@@ -359,9 +391,17 @@ export default function Camera() {
     if (shouldAdvance) goNext()
   }
 
-  // Tap the top-left Back: everything is already saved, so just go home.
+  // Tap the top-left Back: everything is already saved. In extraOnly mode go
+  // back to the Summary we came from; otherwise go home.
   function leaveToHome() {
-    navigate('/')
+    if (extraOnly) navigate('/summary', { state: { ...meta, visitId: visitIdRef.current } })
+    else navigate('/')
+  }
+
+  // Leave extra-photo mode: back to Summary (extraOnly) or the current prompt.
+  function doneExtras() {
+    if (extraOnly) navigate('/summary', { state: { ...meta, visitId: visitIdRef.current } })
+    else setExtraMode(false)
   }
 
   // Mark the visit completed — it and its photos STAY stored until uploaded.
@@ -416,15 +456,30 @@ export default function Camera() {
         </p>
 
         <div className="step-banner">
-          <span className="step-count">Step {stepIndex + 1} of {checklist.length}</span>
-          <span className="step-room">{currentRoom.label}</span>
+          {extraMode ? (
+            <span className="step-room">➕ Extra photos (off-checklist)</span>
+          ) : (
+            <>
+              <span className="step-count">Step {stepIndex + 1} of {checklist.length}</span>
+              <span className="step-room">{currentRoom.label}</span>
+            </>
+          )}
         </div>
 
-        {currentRoom.reminder && <div className="reminder">💡 {currentRoom.reminder}</div>}
+        {!extraMode && currentRoom.reminder && <div className="reminder">💡 {currentRoom.reminder}</div>}
 
         <p className="multi-hint">
-          📸 Take as many photos as you need here, then tap {isLastStep ? 'Finish' : 'Next'}.
+          {extraMode
+            ? '📸 Use the green (Photo) and red (Issue) buttons — you\'ll label each shot. Tap Done when finished.'
+            : `📸 Take as many photos as you need here, then tap ${isLastStep ? 'Finish' : 'Next'}.`}
         </p>
+
+        {/* Live counter — tap to browse everything shot so far this visit. */}
+        <button className="photo-counter" onClick={() => setShowGallery(true)}>
+          📷 {photos.length} photo{photos.length === 1 ? '' : 's'} this visit
+          {flaggedCount > 0 && ` · ⚠️ ${flaggedCount}`}
+          <span className="photo-counter-view">View ›</span>
+        </button>
 
         <div className="viewfinder">
           <video
@@ -455,33 +510,30 @@ export default function Camera() {
           )}
         </div>
 
-        {roomPhotos.length > 0 && <div className="photo-grid">{roomPhotos.map(renderThumb)}</div>}
+        {gridPhotos.length > 0 && <div className="photo-grid">{gridPhotos.map(renderThumb)}</div>}
 
-        <button
-          className="btn btn-secondary"
-          disabled={camStatus !== 'ready'}
-          onClick={() => shoot('extra')}
-        >
-          ➕ Add extra (off-checklist) photo
-        </button>
-
-        <p className="context-line">
-          {photos.length} photo{photos.length === 1 ? '' : 's'} so far
-          {flaggedCount > 0 && ` · ⚠️ ${flaggedCount} issue${flaggedCount === 1 ? '' : 's'} flagged`}
-        </p>
+        {!extraMode && (
+          <button className="btn btn-secondary" onClick={() => setExtraMode(true)}>
+            ➕ Add extra photos (off-checklist)
+          </button>
+        )}
       </div>
 
       {/* Pinned control row. The two shutters sit side by side so a problem can
           be flagged in one tap. Back and Skip flank them. Never moves. */}
       <div className="camera-footer">
         <div className="camera-controls">
-          <button
-            className="ctrl-btn"
-            disabled={stepIndex === 0}
-            onClick={() => setStepIndex(i => i - 1)}
-          >
-            ← Back
-          </button>
+          {extraMode ? (
+            <button className="ctrl-btn" onClick={doneExtras}>✓ Done</button>
+          ) : (
+            <button
+              className="ctrl-btn"
+              disabled={stepIndex === 0}
+              onClick={() => setStepIndex(i => i - 1)}
+            >
+              ← Back
+            </button>
+          )}
 
           <div className="shutter-pair">
             <div className="shutter-cell">
@@ -508,11 +560,25 @@ export default function Camera() {
             </div>
           </div>
 
-          <button className="ctrl-btn" onClick={() => goNext(photos)}>
-            {isLastStep ? 'Finish →' : roomPhotos.length > 0 ? 'Next →' : 'Skip →'}
-          </button>
+          {extraMode ? (
+            <button className="ctrl-btn ctrl-btn-hidden" aria-hidden="true" tabIndex={-1} />
+          ) : (
+            <button className="ctrl-btn" onClick={() => goNext(photos)}>
+              {isLastStep ? 'Finish →' : roomPhotos.length > 0 ? 'Next →' : 'Skip →'}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Gallery of everything shot so far — browse, retake, or delete. */}
+      {showGallery && (
+        <PhotoGallery
+          photos={photos}
+          onClose={() => setShowGallery(false)}
+          onDelete={removePhoto}
+          onRetake={id => { removePhoto(id); setShowGallery(false) }}
+        />
+      )}
 
       {/* One-time intro explaining the two shutters. */}
       {showIntro && (

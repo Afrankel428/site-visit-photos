@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Thumb from '../Thumb'
-import ExtraPhotoCapture from '../ExtraPhotoCapture'
-import { visitAreas } from '../areas'
-import { loadPhotos, savePhoto, deletePhotoRec, deleteVisit } from '../visitStore'
+import PhotoGallery from '../PhotoGallery'
+import { loadPhotos, deletePhotoRec, deleteVisit } from '../visitStore'
 import { uploadVisit, sharePointConfigured } from '../graph'
 
 export default function Summary() {
@@ -18,10 +17,10 @@ export default function Summary() {
   const [progress, setProgress] = useState(0)
   const [statusText, setStatusText] = useState('')
   const [errorText, setErrorText] = useState('')
-  const [addingExtra, setAddingExtra] = useState(false)
+  const [showGallery, setShowGallery] = useState(false)
 
-  const areas = visitAreas({ mode: state?.mode, bedrooms: state?.bedrooms })
-
+  // Reload the visit's photos whenever we (re)enter the summary — e.g. after
+  // adding more extras in the in-app camera and coming back.
   useEffect(() => {
     if (!visitId) return
     let cancelled = false
@@ -29,7 +28,7 @@ export default function Summary() {
       if (!cancelled) setPhotos(stored)
     })
     return () => { cancelled = true }
-  }, [visitId])
+  }, [visitId, state])
 
   const flaggedCount = photos.filter(p => p.issue?.flagged).length
   // Count flagged issues grouped by type (custom "Other" types use their text).
@@ -46,24 +45,22 @@ export default function Summary() {
     setPhotos(prev => prev.filter(p => p.id !== id))
   }
 
-  // Save a labeled extra photo added from the summary into the same visit.
-  async function addExtra(file, { subject, label }) {
-    const rec = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      visitId,
-      room: 'Extra',
-      subject,
-      label,
-      issue: { flagged: false, note: '' },
-      blob: file,
-      takenAt: Date.now(),
-    }
-    try {
-      await savePhoto(rec)
-      setPhotos(prev => [...prev, rec])
-    } catch (err) {
-      console.error('Failed to save extra photo', err)
-    }
+  // Add more extras: re-open the SAME in-app camera (green/red + labeling)
+  // against this finished visit. Never uses the phone's native camera.
+  function addExtraPhotos() {
+    navigate('/camera', {
+      state: {
+        extraOnly: true,
+        visitId,
+        property: state.property,
+        unit: state.unit,
+        visitType: state.visitType,
+        bedrooms: state.bedrooms,
+        bathrooms: state.bathrooms,
+        mode: state.mode,
+        shortName: state.shortName,
+      },
+    })
   }
 
   async function runUpload() {
@@ -128,7 +125,13 @@ export default function Summary() {
           <>
             {photos.length > 0 && (
               <>
-                <p className="context-line">Review photos — tap × to delete any before uploading.</p>
+                <p className="context-line">Review photos — tap a photo to view it full-screen or delete it.</p>
+                {/* Tap to browse all photos full-screen in the shared gallery. */}
+                <button className="photo-counter" onClick={() => setShowGallery(true)}>
+                  📷 {photos.length} photo{photos.length === 1 ? '' : 's'} this visit
+                  {flaggedCount > 0 && ` · ⚠️ ${flaggedCount}`}
+                  <span className="photo-counter-view">View ›</span>
+                </button>
                 <div className="photo-grid">
                   {photos.map(p => {
                     const flagged = p.issue?.flagged
@@ -155,19 +158,11 @@ export default function Summary() {
               </>
             )}
 
-            {/* Add more off-checklist photos right from the summary. */}
+            {/* Add more off-checklist photos via the in-app camera (never native). */}
             {!busy && (
-              addingExtra ? (
-                <ExtraPhotoCapture
-                  areas={areas}
-                  onSave={addExtra}
-                  onClose={() => setAddingExtra(false)}
-                />
-              ) : (
-                <button className="btn btn-secondary" onClick={() => setAddingExtra(true)}>
-                  ➕ Add extra photo
-                </button>
-              )
+              <button className="btn btn-secondary" onClick={addExtraPhotos}>
+                ➕ Add extra photos
+              </button>
             )}
 
             {status === 'uploading' && (
@@ -201,6 +196,14 @@ export default function Summary() {
           {status === 'done' ? 'Start New Visit' : 'Done for now'}
         </button>
       </div>
+
+      {showGallery && (
+        <PhotoGallery
+          photos={photos}
+          onClose={() => setShowGallery(false)}
+          onDelete={busy ? undefined : deletePhoto}
+        />
+      )}
     </div>
   )
 }
