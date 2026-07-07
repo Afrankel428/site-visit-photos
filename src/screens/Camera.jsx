@@ -150,15 +150,12 @@ export default function Camera() {
     setShowIntro(false)
   }
 
-  // Save the photo to durable storage FIRST, then update the screen/advance.
-  // asFlag=true means it was taken with the red ⚠️ shutter: we open the issue
-  // editor for it and only advance once the required note is saved.
+  // Save the photo to durable storage FIRST, then update the screen.
+  // Every prompt accepts MULTIPLE photos: each shot is added (never replaces an
+  // earlier one) and the walk never auto-advances — the manager taps Next/Skip
+  // when they're done with the prompt. asFlag=true (red ⚠️ shutter) opens the
+  // issue editor for the just-taken photo to capture its required note.
   async function addPhoto(file, { asExtra = false, asFlag = false } = {}) {
-    // "multi" prompts (e.g. grounds "Any problem areas") keep every shot and
-    // never auto-advance — the manager taps Finish when done.
-    const isMulti = !asExtra && currentRoom.multi
-    const append = asExtra || isMulti
-
     const photo = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       visitId: visitIdRef.current,
@@ -168,10 +165,6 @@ export default function Camera() {
       issue: { flagged: false, note: '' },
       takenAt: Date.now(),
     }
-
-    // One photo per single prompt: re-shooting replaces the old one.
-    // Extra and multi prompts append instead (nothing replaced).
-    const replaced = append ? [] : photos.filter(p => p.room === currentRoom.label)
 
     try {
       await savePhoto({
@@ -183,23 +176,16 @@ export default function Camera() {
         blob: file,
         takenAt: photo.takenAt,
       })
-      for (const old of replaced) await deletePhotoRec(old.id)
     } catch (err) {
       console.error('Failed to save photo', err)
       setCamError('Could not save that photo — please try again.')
     }
 
-    const next = append
-      ? [...photos, photo]
-      : [...photos.filter(p => p.room !== currentRoom.label), photo]
-    setPhotos(next)
+    setPhotos(prev => [...prev, photo])
 
     if (asFlag) {
-      // Open the issue editor; advance to the next prompt only after the note
-      // is saved (and only for single prompts, not multi/extra).
-      openIssueEditor(photo, !append)
-    } else if (!append) {
-      goNext(next)
+      // A flagged photo needs its type + required note; never auto-advances.
+      openIssueEditor(photo, false)
     }
   }
 
@@ -340,6 +326,10 @@ export default function Camera() {
 
         {currentRoom.reminder && <div className="reminder">💡 {currentRoom.reminder}</div>}
 
+        <p className="multi-hint">
+          📸 Take as many photos as you need here, then tap {isLastStep ? 'Finish' : 'Next'}.
+        </p>
+
         <div className="viewfinder">
           <video
             ref={videoRef}
@@ -413,7 +403,7 @@ export default function Camera() {
           </div>
 
           <button className="ctrl-btn" onClick={() => goNext(photos)}>
-            {isLastStep ? 'Finish →' : 'Skip →'}
+            {isLastStep ? 'Finish →' : roomPhotos.length > 0 ? 'Next →' : 'Skip →'}
           </button>
         </div>
       </div>
