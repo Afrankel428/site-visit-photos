@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { buildChecklist } from '../checklist'
 import { GROUNDS_CHECKLIST } from '../groundsChecklist'
 import { ISSUE_TYPES, getIssueType } from '../issueTypes'
+import { labelToSubject } from '../areas'
 import Thumb from '../Thumb'
 import {
   saveVisitMeta,
@@ -59,6 +60,11 @@ export default function Camera() {
   const [customType, setCustomType] = useState('') // typed type when "Other"
   const [noteDraft, setNoteDraft] = useState('')
   const [advanceAfter, setAdvanceAfter] = useState(false) // advance once note saved
+
+  // Label editor for off-checklist "extra" photos.
+  const [labelingId, setLabelingId] = useState(null)
+  const [labelChoice, setLabelChoice] = useState('') // area id or 'custom'
+  const [customLabel, setCustomLabel] = useState('')
 
   // One-time intro overlay explaining the two shutter buttons.
   const [showIntro, setShowIntro] = useState(() => {
@@ -199,6 +205,9 @@ export default function Camera() {
     if (asFlag) {
       // A flagged photo needs its type + required note; never auto-advances.
       openIssueEditor(photo, false)
+    } else if (asExtra) {
+      // An off-checklist extra needs a label (area or custom text).
+      openLabelEditor(photo)
     } else if (dark) {
       // Non-flagged but dark: offer a quick retake (works even with no torch).
       setDarkPromptId(photo.id)
@@ -266,6 +275,32 @@ export default function Camera() {
   function retakeDarkPhoto() {
     if (darkPromptId) removePhoto(darkPromptId)
     setDarkPromptId(null)
+  }
+
+  // Label editor for off-checklist "extra" photos.
+  function openLabelEditor(photo) {
+    setLabelingId(photo.id)
+    setLabelChoice('')
+    setCustomLabel('')
+  }
+  function cancelLabel() {
+    // Cancelling leaves the extra saved with a generic "Extra" label.
+    setLabelingId(null)
+    setLabelChoice('')
+    setCustomLabel('')
+  }
+  const labelArea =
+    labelChoice && labelChoice !== 'custom' ? checklist.find(c => c.id === labelChoice) : null
+  const labelText = labelArea ? labelArea.label : customLabel.trim()
+  const labelValid = labelText.length > 0
+  function saveLabel() {
+    if (!labelValid) return
+    const subject = labelArea ? labelArea.id : labelToSubject(labelText)
+    updatePhotoRec(labelingId, { subject, label: labelText })
+    setPhotos(prev => prev.map(p => (p.id === labelingId ? { ...p, subject, label: labelText } : p)))
+    setLabelingId(null)
+    setLabelChoice('')
+    setCustomLabel('')
   }
 
   function removePhoto(id) {
@@ -513,6 +548,48 @@ export default function Camera() {
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={keepDarkPhoto}>Keep it</button>
               <button className="btn btn-primary" onClick={retakeDarkPhoto}>Retake</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Label editor for an off-checklist extra photo. */}
+      {labelingId && (
+        <div className="modal-backdrop" onClick={cancelLabel}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>➕ Label this extra photo</h3>
+            <p className="note">What/where is it? Pick an area or type a custom label.</p>
+            <div className="issue-type-grid">
+              {checklist.map(c => (
+                <button
+                  key={c.id}
+                  className={`issue-type-chip ${labelChoice === c.id ? 'issue-type-chip-on' : ''}`}
+                  onClick={() => setLabelChoice(c.id)}
+                >
+                  {c.label}
+                </button>
+              ))}
+              <button
+                className={`issue-type-chip ${labelChoice === 'custom' ? 'issue-type-chip-on' : ''}`}
+                onClick={() => setLabelChoice('custom')}
+              >
+                Custom…
+              </button>
+            </div>
+            {labelChoice === 'custom' && (
+              <input
+                className="note-input"
+                type="text"
+                placeholder="e.g. Balcony, storage closet, exterior meter"
+                value={customLabel}
+                onChange={e => setCustomLabel(e.target.value)}
+              />
+            )}
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={cancelLabel}>Skip label</button>
+              <button className="btn btn-primary" disabled={!labelValid} onClick={saveLabel}>
+                Save label
+              </button>
             </div>
           </div>
         </div>

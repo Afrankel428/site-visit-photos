@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Thumb from '../Thumb'
-import { loadPhotos, deletePhotoRec, deleteVisit } from '../visitStore'
+import ExtraPhotoCapture from '../ExtraPhotoCapture'
+import { visitAreas } from '../areas'
+import { loadPhotos, savePhoto, deletePhotoRec, deleteVisit } from '../visitStore'
 import { uploadVisit, sharePointConfigured } from '../graph'
 
 export default function Summary() {
@@ -16,6 +18,9 @@ export default function Summary() {
   const [progress, setProgress] = useState(0)
   const [statusText, setStatusText] = useState('')
   const [errorText, setErrorText] = useState('')
+  const [addingExtra, setAddingExtra] = useState(false)
+
+  const areas = visitAreas({ mode: state?.mode, bedrooms: state?.bedrooms })
 
   useEffect(() => {
     if (!visitId) return
@@ -39,6 +44,26 @@ export default function Summary() {
   function deletePhoto(id) {
     deletePhotoRec(id)
     setPhotos(prev => prev.filter(p => p.id !== id))
+  }
+
+  // Save a labeled extra photo added from the summary into the same visit.
+  async function addExtra(file, { subject, label }) {
+    const rec = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      visitId,
+      room: 'Extra',
+      subject,
+      label,
+      issue: { flagged: false, note: '' },
+      blob: file,
+      takenAt: Date.now(),
+    }
+    try {
+      await savePhoto(rec)
+      setPhotos(prev => [...prev, rec])
+    } catch (err) {
+      console.error('Failed to save extra photo', err)
+    }
   }
 
   async function runUpload() {
@@ -120,12 +145,29 @@ export default function Summary() {
                             ×
                           </button>
                         )}
-                        {badge && <span className="photo-issue-badge">{badge}</span>}
+                        {badge
+                          ? <span className="photo-issue-badge">{badge}</span>
+                          : p.label && <span className="photo-label-badge">{p.label}</span>}
                       </Thumb>
                     )
                   })}
                 </div>
               </>
+            )}
+
+            {/* Add more off-checklist photos right from the summary. */}
+            {!busy && (
+              addingExtra ? (
+                <ExtraPhotoCapture
+                  areas={areas}
+                  onSave={addExtra}
+                  onClose={() => setAddingExtra(false)}
+                />
+              ) : (
+                <button className="btn btn-secondary" onClick={() => setAddingExtra(true)}>
+                  ➕ Add extra photo
+                </button>
+              )
             )}
 
             {status === 'uploading' && (

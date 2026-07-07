@@ -607,6 +607,31 @@ h1 { font-size: 26px; font-weight: 700; }
 }
 .torch-toggle.torch-on { background: #f5a623; color: #1a1a1a; }
 
+/* Extra-photo capture panel (used on the Summary screen). */
+.extra-capture { display: flex; flex-direction: column; gap: 12px; }
+.extra-viewfinder { flex: 0 0 auto; height: 300px; min-height: 0; }
+.extra-actions { display: flex; gap: 10px; }
+.extra-actions .btn { flex: 1; }
+.extra-label { display: flex; flex-direction: column; gap: 12px; }
+
+/* Neutral label badge on a labeled (non-flagged) thumbnail. */
+.photo-label-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  max-width: calc(100% - 12px);
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .summary-row-sub { padding-top: 8px; padding-bottom: 8px; font-size: 14px; }
 .summary-row-sub span { padding-left: 6px; }
 

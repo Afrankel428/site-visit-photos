@@ -153,6 +153,7 @@ export async function uploadVisit({ meta, photos, onProgress, onStatus }) {
       filename,
       room: p.room,
       subject: p.subject,
+      label: p.label || null, // human label for off-checklist "extra" photos
       takenAt: new Date(p.takenAt).toISOString(),
       issue: p.issue?.flagged
         ? {
